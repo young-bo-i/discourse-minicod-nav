@@ -170,7 +170,7 @@ module DiscourseMinicodNav
     # link text rather than a raw URL.
     def build_raw(resource)
       source = resource["source_type"].to_s
-      parts = ["> #{sync_banner(source)}"]
+      parts = []
 
       summary = resource["summary"].to_s
       parts << "**简介:** #{summary}" if summary.present?
@@ -191,17 +191,6 @@ module DiscourseMinicodNav
       end
 
       parts.join("\n\n")
-    end
-
-    def sync_banner(source)
-      case source
-      when "pavlovia"
-        "提示:本文由资源站从 **Pavlovia 实验库** 同步,请勿手动编辑正文。"
-      when "journal"
-        "提示:本文由资源站从 **学术底刊** 同步,请勿手动编辑正文。"
-      else
-        "提示:本文由资源站同步,请勿手动编辑正文。"
-      end
     end
 
     def external_link_text(source)
