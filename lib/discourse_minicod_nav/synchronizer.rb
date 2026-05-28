@@ -59,8 +59,8 @@ module DiscourseMinicodNav
       resource = payload["resource"]
       raise SyncError.new("resource missing", 400) unless resource.is_a?(Hash)
 
-      resource_id = resource["id"].to_i
-      raise SyncError.new("resource.id missing", 400) if resource_id <= 0
+      resource_id = resource["id"].to_s
+      raise SyncError.new("resource.id missing", 400) if resource_id.blank?
 
       map = ResourceMap.find_by(resource_id: resource_id)
 
@@ -103,22 +103,18 @@ module DiscourseMinicodNav
       @guardian ||= Guardian.new(@bot_user)
     end
 
-    # Prefer discourse_category_id from Resource Station; then slug-based plugin settings; then default.
+    # Prefer discourse_category_id from Resource Station; then route by source_type; then default.
     def discourse_category_id_for(resource)
       payload_cid = resource["discourse_category_id"].to_i
       return payload_cid if payload_cid.positive?
 
-      slug = resource["category_slug"].to_s
-      root = resource["source_root_slug"].to_s
-
-      if slug == "pavlovia" || root == "pavlovia"
+      case resource["source_type"].to_s
+      when "pavlovia"
         pav = SiteSetting.minicodnav_pavlovia_category_id.to_i
         return pav if pav.positive?
-      end
-
-      if slug.start_with?("shit-") || root == "shit"
-        shit = SiteSetting.minicodnav_shit_category_id.to_i
-        return shit if shit.positive?
+      when "journal"
+        jrn = SiteSetting.minicodnav_journal_category_id.to_i
+        return jrn if jrn.positive?
       end
 
       @default_category_id
@@ -147,7 +143,7 @@ module DiscourseMinicodNav
         post = PostCreator.create!(@bot_user, create_opts)
         topic = post.topic
         ResourceMap.create!(
-          resource_id: resource["id"].to_i,
+          resource_id: resource["id"].to_s,
           topic_id: topic.id,
           post_id: post.id,
           last_synced_version: version,

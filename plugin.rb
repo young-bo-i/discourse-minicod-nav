@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # name: discourse-minicod-nav
-# about: Syncs resources from Resource Station (Pavlovia + S.H.*.T) into Discourse topics.
+# about: Syncs resources from Resource Station (Pavlovia + Journal) into Discourse topics.
 # version: 0.1.0
 # authors: EnterScholar
 # url: https://github.com/young-bo-i/discourse-minicod-nav

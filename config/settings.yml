@@ -12,7 +12,7 @@ discourse_minicod_nav:
   minicodnav_pavlovia_category_id:
     default: 0
     client: false
-  minicodnav_shit_category_id:
+  minicodnav_journal_category_id:
     default: 0
     client: false
   minicodnav_bot_user_id:

@@ -41,10 +41,10 @@ module DiscourseMinicodNav
       end
 
       payload = JSON.parse(raw)
-      delivery_id = request.headers["X-MinicodNav-Delivery"].presence
-      return render json: { error: "missing X-MinicodNav-Delivery" }, status: 401 if delivery_id.blank?
+      delivery_id = request.headers["X-AcadNav-Delivery"].presence
+      return render json: { error: "missing X-AcadNav-Delivery" }, status: 401 if delivery_id.blank?
       event = payload["event"].to_s
-      resource_id = payload.dig("resource", "id").to_i
+      resource_id = payload.dig("resource", "id").to_s
       start_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
       begin
@@ -54,7 +54,7 @@ module DiscourseMinicodNav
           WebhookReceipt.create!(
             delivery_id: delivery_id,
             event: event,
-            resource_id: resource_id.positive? ? resource_id : nil,
+            resource_id: resource_id.presence,
             status: result[:skipped] ? "skipped" : "ok",
             duration_ms: elapsed_ms,
             created_at: Time.zone.now,
@@ -78,7 +78,7 @@ module DiscourseMinicodNav
     private
 
     def verify_signature!(raw, secret)
-      sig_header = request.headers["X-MinicodNav-Signature"].to_s
+      sig_header = request.headers["X-AcadNav-Signature"].to_s
       sig = sig_header.delete_prefix("sha256=").strip
       expected = OpenSSL::HMAC.hexdigest("SHA256", secret, raw)
       return false if expected.bytesize != sig.bytesize
@@ -87,7 +87,7 @@ module DiscourseMinicodNav
     end
 
     def fresh_timestamp?
-      ts = request.headers["X-MinicodNav-Timestamp"].to_s.to_i
+      ts = request.headers["X-AcadNav-Timestamp"].to_s.to_i
       return false if ts <= 0
 
       (Time.zone.now.to_i - ts).abs <= 300
