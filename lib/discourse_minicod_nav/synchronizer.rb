@@ -172,9 +172,6 @@ module DiscourseMinicodNav
       source = resource["source_type"].to_s
       parts = ["> #{sync_banner(source)}"]
 
-      icon = resource["icon_url"].to_s
-      parts << "![](#{icon})" if icon.present?
-
       summary = resource["summary"].to_s
       parts << "**简介:** #{summary}" if summary.present?
 
