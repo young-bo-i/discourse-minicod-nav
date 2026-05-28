@@ -184,12 +184,6 @@ module DiscourseMinicodNav
         parts << content
       end
 
-      screenshots = Array(resource["screenshots"]).reject { |s| s.to_s.blank? }
-      if screenshots.any?
-        parts << "## 截图"
-        screenshots.each { |url| parts << "![](#{url})" }
-      end
-
       parts.join("\n\n")
     end
 
