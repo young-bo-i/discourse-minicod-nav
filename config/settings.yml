@@ -14,13 +14,16 @@ discourse_minicod_nav:
     default: ""
     client: false
   minicodnav_target_category_id:
-    default: 0
+    default: ""
+    type: category
     client: false
   minicodnav_pavlovia_category_id:
-    default: 0
+    default: ""
+    type: category
     client: false
   minicodnav_journal_category_id:
-    default: 0
+    default: ""
+    type: category
     client: false
   minicodnav_bot_user_id:
     default: -1

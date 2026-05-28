@@ -1,0 +1,13 @@
+zh_CN:
+  minicod_nav:
+    title: "Minicodhook"
+  site_settings:
+    minicodnav_plugin_enabled: "启用来自 openscholay 资源中台的 Minicodhook 同步。"
+    minicodnav_webhook_secret_pavlovia: "Pavlovia 来源 webhook 的 HMAC 共享密钥;同时作为拉取 Pavlovia snapshot 时的 Bearer Token。"
+    minicodnav_webhook_secret_journal: "学术底刊来源 webhook 的 HMAC 共享密钥;同时作为拉取学术底刊 snapshot 时的 Bearer Token。"
+    minicodnav_openscholay_base_url: "openscholay 上游主机地址(如 https://www.minicod.com)。冷启动 / 灾备时 GET /api/nav/snapshot/:source 使用。"
+    minicodnav_target_category_id: "当 payload 未携带 discourse_category_id、且无法按 source_type 路由时使用的默认 Discourse 分类。"
+    minicodnav_pavlovia_category_id: "source_type=pavlovia 的资源在 webhook 未携带 discourse_category_id 时落到的 Discourse 分类。"
+    minicodnav_journal_category_id: "source_type=journal(学术底刊)的资源在 webhook 未携带 discourse_category_id 时落到的 Discourse 分类。"
+    minicodnav_bot_user_id: "执行话题 / 帖子操作的用户 ID(-1 表示使用 system 用户)。"
+    minicodnav_archived_tag: "资源在中台被归档时打到话题上的标签名。"

@@ -1,0 +1,23 @@
+zh_CN:
+  minicod_nav:
+    title: "Minicodhook"
+  js:
+    minicod_nav:
+      title: "Minicodhook"
+      refresh: "刷新"
+      status: "状态"
+      plugin_enabled: "插件已启用"
+      target_category_id: "默认目标分类"
+      map_count: "已同步资源数"
+      receipts_24h: "24 小时内接收量"
+      latest_maps: "最近资源映射"
+      latest_receipts: "最近 Webhook 记录"
+      webhook_urls: "Webhook 接收端点"
+      webhook_urls_hint: "将下方两个 URL 粘贴到中台 Pavlovia / 学术底刊 的「Discourse 同步」配置面板;两侧 secret 必须保持一致。"
+      secret_set: "已配置 secret"
+      secret_missing: "secret 未配置"
+  admin_js:
+    admin:
+      site_settings:
+        categories:
+          discourse_minicod_nav: "Minicodhook"
