@@ -17,10 +17,6 @@ module DiscourseMinicodNav
     EVENT_ARCHIVED = "resource.archived"
     EVENT_DELETED = "resource.deleted"
 
-    # Order matters: first present value wins. zh-CN before zh in case upstream
-    # ever distinguishes; both fall back to default.
-    PREFERRED_LOCALES = %w[zh-CN zh].freeze
-
     def initialize(bot_user:)
       @bot_user = bot_user
     end
@@ -107,8 +103,8 @@ module DiscourseMinicodNav
     end
 
     def upsert_topic!(resource, map, version)
-      title = pick_localized(resource, "title")
-      raw = pick_localized(resource, "rendered_markdown")
+      title = resource["title"].to_s
+      raw = resource["rendered_markdown"].to_s
       raise SyncError.new("title required", 422) if title.blank?
       raise SyncError.new("rendered_markdown required", 422) if raw.blank?
 
@@ -161,19 +157,6 @@ module DiscourseMinicodNav
       map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
       enqueue_image_pull(first_post.id)
       map
-    end
-
-    # Contract v1.2 §3.2: rendered_markdown_i18n only includes locales the
-    # operator actually filled. Pick zh if present, else default.
-    def pick_localized(resource, field)
-      i18n = resource["#{field}_i18n"]
-      if i18n.is_a?(Hash)
-        PREFERRED_LOCALES.each do |loc|
-          val = i18n[loc].to_s
-          return val if val.present?
-        end
-      end
-      resource[field].to_s
     end
 
     def enqueue_image_pull(post_id)
