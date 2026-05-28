@@ -2,7 +2,11 @@ discourse_minicod_nav:
   minicodnav_plugin_enabled:
     default: true
     client: false
-  minicodnav_webhook_secret:
+  minicodnav_webhook_secret_pavlovia:
+    default: ""
+    secret: true
+    client: false
+  minicodnav_webhook_secret_journal:
     default: ""
     secret: true
     client: false

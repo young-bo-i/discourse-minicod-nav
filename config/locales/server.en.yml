@@ -3,7 +3,8 @@ en:
     title: "Minicodhook"
   site_settings:
     minicodnav_plugin_enabled: "Enable Minicodhook sync from Resource Station."
-    minicodnav_webhook_secret: "Shared secret for HMAC verification of inbound webhooks."
+    minicodnav_webhook_secret_pavlovia: "HMAC shared secret for webhooks where resource.source_type=pavlovia."
+    minicodnav_webhook_secret_journal: "HMAC shared secret for webhooks where resource.source_type=journal (学术底刊)."
     minicodnav_target_category_id: "Fallback Discourse category ID when payload has no discourse_category_id."
     minicodnav_pavlovia_category_id: "Discourse category for resources with source_type=pavlovia when payload has no discourse_category_id."
     minicodnav_journal_category_id: "Discourse category for resources with source_type=journal (学术底刊) when payload has no discourse_category_id."

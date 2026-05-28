@@ -11,6 +11,11 @@ module DiscourseMinicodNav
 
     include ReadOnlyMixin
 
+    SECRET_SETTINGS_BY_SOURCE = {
+      "pavlovia" => :minicodnav_webhook_secret_pavlovia,
+      "journal" => :minicodnav_webhook_secret_journal,
+    }.freeze
+
     skip_before_action :verify_authenticity_token, raise: false
 
     before_action :check_readonly_mode
@@ -25,12 +30,26 @@ module DiscourseMinicodNav
         return render json: { error: "plugin disabled", code: "minicodnav_plugin_disabled" }, status: 403
       end
 
-      secret = SiteSetting.minicodnav_webhook_secret.to_s
-      if secret.blank?
-        return render json: { error: "minicodnav_webhook_secret not set" }, status: 503
+      raw = request.body.read
+
+      # Parse first (untrusted) to learn source_type; signature still verifies raw bytes.
+      payload =
+        begin
+          JSON.parse(raw)
+        rescue JSON::ParserError
+          return render json: { error: "invalid json" }, status: 400
+        end
+
+      source_type = payload.dig("resource", "source_type").to_s
+      setting_key = SECRET_SETTINGS_BY_SOURCE[source_type]
+      unless setting_key
+        return render json: { error: "unknown source_type" }, status: 401
       end
 
-      raw = request.body.read
+      secret = SiteSetting.public_send(setting_key).to_s
+      if secret.blank?
+        return render json: { error: "#{setting_key} not set" }, status: 503
+      end
 
       unless verify_signature!(raw, secret)
         return render json: { error: "invalid signature" }, status: 401
@@ -40,9 +59,9 @@ module DiscourseMinicodNav
         return render json: { error: "stale timestamp" }, status: 401
       end
 
-      payload = JSON.parse(raw)
       delivery_id = request.headers["X-AcadNav-Delivery"].presence
       return render json: { error: "missing X-AcadNav-Delivery" }, status: 401 if delivery_id.blank?
+
       event = payload["event"].to_s
       resource_id = payload.dig("resource", "id").to_s
       start_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -65,8 +84,6 @@ module DiscourseMinicodNav
       end
 
       render json: { ok: true }, status: 200
-    rescue JSON::ParserError
-      render json: { error: "invalid json" }, status: 400
     rescue DiscourseMinicodNav::SyncError => e
       Rails.logger.warn("[minicodnav] sync error: #{e.message}")
       render json: { error: e.message }, status: e.status

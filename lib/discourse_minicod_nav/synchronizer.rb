@@ -10,19 +10,12 @@ module DiscourseMinicodNav
     end
   end
 
-  # Applies Resource Station webhook payload (architecture doc shape).
+  # Applies Resource Station webhook payload (contract v1: 4 resource events).
   class Synchronizer
-    STATUS_ARCHIVED = 2
-    STATUS_DELETED = 3
-
     EVENT_CREATED = "resource.created"
     EVENT_UPDATED = "resource.updated"
     EVENT_ARCHIVED = "resource.archived"
     EVENT_DELETED = "resource.deleted"
-    EVENT_RESTORED = "resource.restored"
-    EVENT_TAG_RENAMED = "tag.renamed"
-    EVENT_TAG_MERGED = "tag.merged"
-    EVENT_TAG_DELETED = "tag.deleted"
 
     def initialize(bot_user:, default_category_id:, archived_tag:)
       @bot_user = bot_user
@@ -48,21 +41,13 @@ module DiscourseMinicodNav
       event = payload["event"].to_s
       version = payload["version"].to_i
 
-      if event.start_with?("tag.")
-        tag = payload["tag"]
-        raise SyncError.new("tag missing", 400) unless tag.is_a?(Hash)
-
-        dispatch_tag_event!(event, tag)
-        return { ok: true }
-      end
-
       resource = payload["resource"]
       raise SyncError.new("resource missing", 400) unless resource.is_a?(Hash)
 
       resource_id = resource["id"].to_s
       raise SyncError.new("resource.id missing", 400) if resource_id.blank?
 
-      map = ResourceMap.find_by(resource_id: resource_id)
+      map = ResourceMap.find_by(resource_id: resource_id) || adopt_existing_topic(resource_id, resource)
 
       if map && version.positive? && version < map.last_synced_version
         return { skipped: true, reason: "older_version" }
@@ -70,13 +55,11 @@ module DiscourseMinicodNav
 
       case event
       when EVENT_CREATED, EVENT_UPDATED
-        upsert_topic!(resource, map, version, event)
+        upsert_topic!(resource, map, version)
       when EVENT_ARCHIVED
         archive_topic!(map, version)
       when EVENT_DELETED
         delete_topic!(map, version)
-      when EVENT_RESTORED
-        restore_topic!(resource, map, version)
       else
         raise SyncError.new("unsupported event: #{event}", 400)
       end
@@ -86,21 +69,30 @@ module DiscourseMinicodNav
 
     private
 
-    def dispatch_tag_event!(event, tag)
-      case event
-      when EVENT_TAG_RENAMED
-        rename_tag!(tag)
-      when EVENT_TAG_MERGED
-        merge_tag!(tag)
-      when EVENT_TAG_DELETED
-        delete_tag!(tag)
-      else
-        raise SyncError.new("unsupported tag event: #{event}", 400)
-      end
-    end
-
     def guardian
       @guardian ||= Guardian.new(@bot_user)
+    end
+
+    # Contract §4: if upstream knows we synced this resource before (e.g. plugin DB was wiped
+    # but Discourse topic still exists), it sends discourse_topic_id. Re-bind our map to that
+    # topic instead of creating a duplicate.
+    def adopt_existing_topic(resource_id, resource)
+      topic_id = resource["discourse_topic_id"].to_i
+      return nil if topic_id <= 0
+
+      topic = Topic.find_by(id: topic_id)
+      return nil if topic.nil?
+
+      first_post = topic.first_post
+      return nil if first_post.nil?
+
+      ResourceMap.create!(
+        resource_id: resource_id,
+        topic_id: topic.id,
+        post_id: first_post.id,
+        last_synced_version: 0,
+        last_synced_at: Time.zone.now,
+      )
     end
 
     # Prefer discourse_category_id from Resource Station; then route by source_type; then default.
@@ -120,14 +112,13 @@ module DiscourseMinicodNav
       @default_category_id
     end
 
-    def upsert_topic!(resource, map, version, _event)
+    def upsert_topic!(resource, map, version)
       title = resource["title"].to_s
       raw = resource["rendered_markdown"].to_s
       raise SyncError.new("title required", 422) if title.blank?
       raise SyncError.new("rendered_markdown required", 422) if raw.blank?
 
       tags = normalize_tags(Array(resource["tags"]))
-      status = resource["status"].to_i
       target_category_id = discourse_category_id_for(resource)
 
       if map.nil?
@@ -149,7 +140,6 @@ module DiscourseMinicodNav
           last_synced_version: version,
           last_synced_at: Time.zone.now,
         )
-        apply_status_flags!(topic, status)
         return
       end
 
@@ -174,7 +164,6 @@ module DiscourseMinicodNav
       end
 
       map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
-      apply_status_flags!(topic, status)
       map
     end
 
@@ -210,105 +199,10 @@ module DiscourseMinicodNav
       map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
     end
 
-    def restore_topic!(resource, map, version)
-      return if map.nil?
-
-      topic = Topic.unscoped.find_by(id: map.topic_id)
-      raise SyncError.new("topic not found", 422) unless topic
-
-      topic.recover!(@bot_user) if topic.deleted_at.present?
-
-      topic.update_status(:closed, false, @bot_user) if topic.closed
-
-      names = topic.tags.pluck(:name) - [@archived_tag]
-      tag_ok = DiscourseTagging.tag_topic_by_names(topic, guardian, names)
-      raise SyncError.new(topic.errors.full_messages.join(", "), 422) unless tag_ok
-
-      title = resource["title"].to_s
-      raw = resource["rendered_markdown"].to_s
-      if title.present? && raw.present?
-        first_post = topic.first_post
-        raise SyncError.new("first post not found", 422) unless first_post
-
-        revisor = PostRevisor.new(first_post, topic)
-        unless revisor.revise!(@bot_user, { raw: raw, title: title }, { skip_validations: true })
-          raise SyncError.new(first_post.errors.full_messages.join(", "), 422)
-        end
-      end
-
-      map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
-    end
-
-    def apply_status_flags!(topic, status)
-      case status
-      when STATUS_ARCHIVED
-        topic.update_status(:closed, true, @bot_user)
-        tag_ok =
-          DiscourseTagging.tag_topic_by_names(topic, guardian, [@archived_tag], append: true)
-        raise SyncError.new(topic.errors.full_messages.join(", "), 422) unless tag_ok
-      when STATUS_DELETED
-        nil
-      end
-    end
-
     def normalize_tags(tags)
       max = SiteSetting.max_tags_per_topic.to_i
       max = 5 if max <= 0
       tags.map(&:to_s).map(&:strip).reject(&:blank?).uniq.take(max)
-    end
-
-    def rename_tag!(tag)
-      old_name = tag["old_name"].to_s
-      new_name = tag["new_name"].to_s
-      raise SyncError.new("old_name/new_name required", 400) if old_name.blank? || new_name.blank?
-      return if old_name == new_name
-
-      src = Tag.find_by(name: old_name)
-      return if src.nil?
-
-      if (dst = Tag.find_by(name: new_name)) && dst.id != src.id
-        Topic.joins(:tags).where(tags: { id: src.id }).find_each do |topic|
-          names = (topic.tags.pluck(:name) - [old_name] + [new_name]).uniq
-          tag_ok = DiscourseTagging.tag_topic_by_names(topic, guardian, names)
-          raise SyncError.new(topic.errors.full_messages.join(", "), 422) unless tag_ok
-        end
-        src.destroy!
-      else
-        src.update!(name: new_name)
-      end
-    end
-
-    def merge_tag!(tag)
-      src_name = tag["src_name"].to_s
-      dst_name = tag["dst_name"].to_s
-      raise SyncError.new("src_name/dst_name required", 400) if src_name.blank? || dst_name.blank?
-      return if src_name == dst_name
-
-      src = Tag.find_by(name: src_name)
-      return if src.nil?
-
-      dst = Tag.find_or_create_by!(name: dst_name)
-      Topic.joins(:tags).where(tags: { id: src.id }).find_each do |topic|
-        names = (topic.tags.pluck(:name) - [src_name] + [dst.name]).uniq
-        tag_ok = DiscourseTagging.tag_topic_by_names(topic, guardian, names)
-        raise SyncError.new(topic.errors.full_messages.join(", "), 422) unless tag_ok
-      end
-      src.destroy!
-    end
-
-    def delete_tag!(tag)
-      name = tag["name"].to_s
-      raise SyncError.new("name required", 400) if name.blank?
-
-      src = Tag.find_by(name: name)
-      return if src.nil?
-
-      Topic.joins(:tags).where(tags: { id: src.id }).find_each do |topic|
-        names = topic.tags.pluck(:name) - [name]
-        tag_ok = DiscourseTagging.tag_topic_by_names(topic, guardian, names)
-        raise SyncError.new(topic.errors.full_messages.join(", "), 422) unless tag_ok
-      end
-      src.destroy!
     end
   end
 end
