@@ -3,6 +3,6 @@ export default {
   path: "/plugins",
 
   map() {
-    this.route("academic-nav");
+    this.route("minicod-nav");
   },
 };

@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-module DiscourseAcademicNav
+module DiscourseMinicodNav
   module Admin
     class ReceiptsController < ::Admin::AdminController
-      requires_plugin "discourse-academic-nav"
+      requires_plugin "discourse-minicod-nav"
 
       def index
         limit = params[:limit].to_i

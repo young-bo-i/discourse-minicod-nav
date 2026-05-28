@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-module DiscourseAcademicNav
+module DiscourseMinicodNav
   class Engine < ::Rails::Engine
-    engine_name "discourse_academic_nav"
-    isolate_namespace DiscourseAcademicNav
+    engine_name "discourse_minicod_nav"
+    isolate_namespace DiscourseMinicodNav
 
     config.root = File.expand_path("../..", __dir__)
 

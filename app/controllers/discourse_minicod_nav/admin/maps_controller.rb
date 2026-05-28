@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-module DiscourseAcademicNav
+module DiscourseMinicodNav
   module Admin
     class MapsController < ::Admin::AdminController
-      requires_plugin "discourse-academic-nav"
+      requires_plugin "discourse-minicod-nav"
 
       def index
         page = params[:page].to_i

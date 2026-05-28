@@ -1,6 +1,6 @@
 import Route from "@ember/routing/route";
 
-export default class AdminPluginsAcademicNavRoute extends Route {
+export default class AdminPluginsMinicodNavRoute extends Route {
   setupController(controller) {
     super.setupController(...arguments);
     controller.load();

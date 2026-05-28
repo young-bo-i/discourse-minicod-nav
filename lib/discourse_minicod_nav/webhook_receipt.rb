@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-module DiscourseAcademicNav
+module DiscourseMinicodNav
   class WebhookReceipt < ActiveRecord::Base
-    self.table_name = "academic_nav_webhook_receipts"
+    self.table_name = "minicod_nav_webhook_receipts"
   end
 end

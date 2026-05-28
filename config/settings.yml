@@ -1,23 +1,23 @@
-discourse_academic_nav:
-  acadnav_plugin_enabled:
+discourse_minicod_nav:
+  minicodnav_plugin_enabled:
     default: true
     client: false
-  acadnav_webhook_secret:
+  minicodnav_webhook_secret:
     default: ""
     secret: true
     client: false
-  acadnav_target_category_id:
+  minicodnav_target_category_id:
     default: 0
     client: false
-  acadnav_pavlovia_category_id:
+  minicodnav_pavlovia_category_id:
     default: 0
     client: false
-  acadnav_shit_category_id:
+  minicodnav_shit_category_id:
     default: 0
     client: false
-  acadnav_bot_user_id:
+  minicodnav_bot_user_id:
     default: -1
     client: false
-  acadnav_archived_tag:
-    default: "acadnav-archived"
+  minicodnav_archived_tag:
+    default: "minicodnav-archived"
     client: false

@@ -2,7 +2,7 @@
 
 require "openssl"
 
-module DiscourseAcademicNav
+module DiscourseMinicodNav
   # Inherit ActionController::Base like core Discourse::WebhooksController — not ApplicationController,
   # which runs many before_actions (theme, locale, login, xhr, layout preload) that break
   # anonymous server-to-server POSTs and surface as generic JSON 500.
@@ -21,13 +21,13 @@ module DiscourseAcademicNav
     end
 
     def create
-      unless SiteSetting.acadnav_plugin_enabled
-        return render json: { error: "plugin disabled", code: "acadnav_plugin_disabled" }, status: 403
+      unless SiteSetting.minicodnav_plugin_enabled
+        return render json: { error: "plugin disabled", code: "minicodnav_plugin_disabled" }, status: 403
       end
 
-      secret = SiteSetting.acadnav_webhook_secret.to_s
+      secret = SiteSetting.minicodnav_webhook_secret.to_s
       if secret.blank?
-        return render json: { error: "acadnav_webhook_secret not set" }, status: 503
+        return render json: { error: "minicodnav_webhook_secret not set" }, status: 503
       end
 
       raw = request.body.read
@@ -41,15 +41,15 @@ module DiscourseAcademicNav
       end
 
       payload = JSON.parse(raw)
-      delivery_id = request.headers["X-AcadNav-Delivery"].presence
-      return render json: { error: "missing X-AcadNav-Delivery" }, status: 401 if delivery_id.blank?
+      delivery_id = request.headers["X-MinicodNav-Delivery"].presence
+      return render json: { error: "missing X-MinicodNav-Delivery" }, status: 401 if delivery_id.blank?
       event = payload["event"].to_s
       resource_id = payload.dig("resource", "id").to_i
       start_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
       begin
         ActiveRecord::Base.transaction do
-          result = DiscourseAcademicNav::Synchronizer.from_site_settings.process!(payload)
+          result = DiscourseMinicodNav::Synchronizer.from_site_settings.process!(payload)
           elapsed_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_at) * 1000).to_i
           WebhookReceipt.create!(
             delivery_id: delivery_id,
@@ -67,18 +67,18 @@ module DiscourseAcademicNav
       render json: { ok: true }, status: 200
     rescue JSON::ParserError
       render json: { error: "invalid json" }, status: 400
-    rescue DiscourseAcademicNav::SyncError => e
-      Rails.logger.warn("[acadnav] sync error: #{e.message}")
+    rescue DiscourseMinicodNav::SyncError => e
+      Rails.logger.warn("[minicodnav] sync error: #{e.message}")
       render json: { error: e.message }, status: e.status
     rescue StandardError => e
-      Rails.logger.error("[acadnav] #{e.class}: #{e.message}\n#{e.backtrace&.first(12)&.join("\n")}")
+      Rails.logger.error("[minicodnav] #{e.class}: #{e.message}\n#{e.backtrace&.first(12)&.join("\n")}")
       render json: { error: "internal error", exception: e.class.name, message: e.message }, status: 500
     end
 
     private
 
     def verify_signature!(raw, secret)
-      sig_header = request.headers["X-AcadNav-Signature"].to_s
+      sig_header = request.headers["X-MinicodNav-Signature"].to_s
       sig = sig_header.delete_prefix("sha256=").strip
       expected = OpenSSL::HMAC.hexdigest("SHA256", secret, raw)
       return false if expected.bytesize != sig.bytesize
@@ -87,7 +87,7 @@ module DiscourseAcademicNav
     end
 
     def fresh_timestamp?
-      ts = request.headers["X-AcadNav-Timestamp"].to_s.to_i
+      ts = request.headers["X-MinicodNav-Timestamp"].to_s.to_i
       return false if ts <= 0
 
       (Time.zone.now.to_i - ts).abs <= 300

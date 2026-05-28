@@ -1,9 +1,9 @@
 en:
-  academic_nav:
-    title: "Academic Nav"
+  minicod_nav:
+    title: "Minicodhook"
   js:
-    academic_nav:
-      title: "Academic Nav"
+    minicod_nav:
+      title: "Minicodhook"
       refresh: "Refresh"
       plugin_enabled: "Plugin Enabled"
       target_category_id: "Target Category ID"
@@ -15,4 +15,4 @@ en:
     admin:
       site_settings:
         categories:
-          discourse_academic_nav: "Academic Navigation"
+          discourse_minicod_nav: "Minicodhook"

@@ -1,11 +1,11 @@
 en:
-  academic_nav:
-    title: "Academic Nav"
+  minicod_nav:
+    title: "Minicodhook"
   site_settings:
-    acadnav_plugin_enabled: "Enable Academic Navigation sync from Resource Station."
-    acadnav_webhook_secret: "Shared secret for HMAC verification of inbound webhooks."
-    acadnav_target_category_id: "Fallback Discourse category ID when payload has no discourse_category_id."
-    acadnav_pavlovia_category_id: "Discourse category for Pavlovia (pavlovia slug) when not set on Resource Station category."
-    acadnav_shit_category_id: "Discourse category for S.H.*.T (shit-* slugs) when not set on Resource Station category."
-    acadnav_bot_user_id: "User ID for topic/post actions (-1 = system user)."
-    acadnav_archived_tag: "Tag name applied when a resource is archived on Resource Station."
+    minicodnav_plugin_enabled: "Enable Minicodhook sync from Resource Station."
+    minicodnav_webhook_secret: "Shared secret for HMAC verification of inbound webhooks."
+    minicodnav_target_category_id: "Fallback Discourse category ID when payload has no discourse_category_id."
+    minicodnav_pavlovia_category_id: "Discourse category for Pavlovia (pavlovia slug) when not set on Resource Station category."
+    minicodnav_shit_category_id: "Discourse category for S.H.*.T (shit-* slugs) when not set on Resource Station category."
+    minicodnav_bot_user_id: "User ID for topic/post actions (-1 = system user)."
+    minicodnav_archived_tag: "Tag name applied when a resource is archived on Resource Station."

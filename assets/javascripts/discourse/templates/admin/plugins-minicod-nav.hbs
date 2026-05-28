@@ -1,34 +1,34 @@
-<section class="acadnav-admin">
-  <h2>{{i18n "academic_nav.title"}}</h2>
+<section class="minicodnav-admin">
+  <h2>{{i18n "minicod_nav.title"}}</h2>
 
   <div style="margin-bottom: 12px;">
-    <DButton @label="academic_nav.refresh" @action={{this.load}} @disabled={{this.loading}} />
+    <DButton @label="minicod_nav.refresh" @action={{this.load}} @disabled={{this.loading}} />
   </div>
 
   {{#if this.dashboard}}
     <table class="topic-list">
       <tbody>
         <tr>
-          <td>{{i18n "academic_nav.plugin_enabled"}}</td>
+          <td>{{i18n "minicod_nav.plugin_enabled"}}</td>
           <td>{{this.dashboard.plugin_enabled}}</td>
         </tr>
         <tr>
-          <td>{{i18n "academic_nav.target_category_id"}}</td>
+          <td>{{i18n "minicod_nav.target_category_id"}}</td>
           <td>{{this.dashboard.target_category_id}}</td>
         </tr>
         <tr>
-          <td>{{i18n "academic_nav.map_count"}}</td>
+          <td>{{i18n "minicod_nav.map_count"}}</td>
           <td>{{this.dashboard.map_count}}</td>
         </tr>
         <tr>
-          <td>{{i18n "academic_nav.receipts_24h"}}</td>
+          <td>{{i18n "minicod_nav.receipts_24h"}}</td>
           <td>{{this.dashboard.receipts_24h.total}} (ok={{this.dashboard.receipts_24h.ok}}, skipped={{this.dashboard.receipts_24h.skipped}})</td>
         </tr>
       </tbody>
     </table>
   {{/if}}
 
-  <h3>{{i18n "academic_nav.latest_maps"}}</h3>
+  <h3>{{i18n "minicod_nav.latest_maps"}}</h3>
   <table class="topic-list">
     <thead>
       <tr>
@@ -52,7 +52,7 @@
     </tbody>
   </table>
 
-  <h3>{{i18n "academic_nav.latest_receipts"}}</h3>
+  <h3>{{i18n "minicod_nav.latest_receipts"}}</h3>
   <table class="topic-list">
     <thead>
       <tr>

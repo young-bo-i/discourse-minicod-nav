@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module DiscourseAcademicNav
+module DiscourseMinicodNav
   class SyncError < StandardError
     attr_reader :status
 
@@ -31,16 +31,16 @@ module DiscourseAcademicNav
     end
 
     def self.from_site_settings
-      cid = SiteSetting.acadnav_target_category_id.to_i
-      raise SyncError.new("acadnav_target_category_id must be set (fallback Discourse category)", 503) if cid <= 0
+      cid = SiteSetting.minicodnav_target_category_id.to_i
+      raise SyncError.new("minicodnav_target_category_id must be set (fallback Discourse category)", 503) if cid <= 0
 
       bot =
         begin
-          id = SiteSetting.acadnav_bot_user_id.to_i
+          id = SiteSetting.minicodnav_bot_user_id.to_i
           id.positive? ? (User.find_by(id: id) || Discourse.system_user) : Discourse.system_user
         end
 
-      tag = SiteSetting.acadnav_archived_tag.presence || "acadnav-archived"
+      tag = SiteSetting.minicodnav_archived_tag.presence || "minicodnav-archived"
       new(bot_user: bot, default_category_id: cid, archived_tag: tag)
     end
 
@@ -112,12 +112,12 @@ module DiscourseAcademicNav
       root = resource["source_root_slug"].to_s
 
       if slug == "pavlovia" || root == "pavlovia"
-        pav = SiteSetting.acadnav_pavlovia_category_id.to_i
+        pav = SiteSetting.minicodnav_pavlovia_category_id.to_i
         return pav if pav.positive?
       end
 
       if slug.start_with?("shit-") || root == "shit"
-        shit = SiteSetting.acadnav_shit_category_id.to_i
+        shit = SiteSetting.minicodnav_shit_category_id.to_i
         return shit if shit.positive?
       end
 
