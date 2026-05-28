@@ -7,7 +7,6 @@ en:
       refresh: "Refresh"
       status: "Status"
       plugin_enabled: "Plugin Enabled"
-      target_category_id: "Target Category ID"
       map_count: "Mapped Resources"
       receipts_24h: "Receipts in 24h"
       latest_maps: "Latest Resource Maps"

@@ -7,7 +7,6 @@ zh_CN:
       refresh: "刷新"
       status: "状态"
       plugin_enabled: "插件已启用"
-      target_category_id: "默认目标分类"
       map_count: "已同步资源数"
       receipts_24h: "24 小时内接收量"
       latest_maps: "最近资源映射"

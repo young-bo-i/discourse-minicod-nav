@@ -11,8 +11,6 @@ module DiscourseMinicodNav
         base = Discourse.base_url
         render json: {
           plugin_enabled: SiteSetting.minicodnav_plugin_enabled,
-          target_category_id: SiteSetting.minicodnav_target_category_id,
-          archived_tag: SiteSetting.minicodnav_archived_tag,
           webhook_urls: {
             pavlovia: "#{base}/minicod-nav/webhook/pavlovia",
             journal: "#{base}/minicod-nav/webhook/journal",

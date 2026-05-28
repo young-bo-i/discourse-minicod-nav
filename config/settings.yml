@@ -13,10 +13,6 @@ discourse_minicod_nav:
   minicodnav_openscholay_base_url:
     default: ""
     client: false
-  minicodnav_target_category_id:
-    default: ""
-    type: category
-    client: false
   minicodnav_pavlovia_category_id:
     default: ""
     type: category
@@ -24,10 +20,4 @@ discourse_minicod_nav:
   minicodnav_journal_category_id:
     default: ""
     type: category
-    client: false
-  minicodnav_bot_user_id:
-    default: -1
-    client: false
-  minicodnav_archived_tag:
-    default: "minicodnav-archived"
     client: false

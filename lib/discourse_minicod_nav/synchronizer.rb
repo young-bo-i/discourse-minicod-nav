@@ -10,31 +10,19 @@ module DiscourseMinicodNav
     end
   end
 
-  # Applies Resource Station webhook payload (contract v1: 4 resource events).
+  # Applies Resource Station webhook payload (contract v1.3: 4 resource events).
   class Synchronizer
     EVENT_CREATED = "resource.created"
     EVENT_UPDATED = "resource.updated"
     EVENT_ARCHIVED = "resource.archived"
     EVENT_DELETED = "resource.deleted"
 
-    def initialize(bot_user:, default_category_id:, archived_tag:)
+    def initialize(bot_user:)
       @bot_user = bot_user
-      @default_category_id = default_category_id
-      @archived_tag = archived_tag
     end
 
     def self.from_site_settings
-      cid = SiteSetting.minicodnav_target_category_id.to_i
-      raise SyncError.new("minicodnav_target_category_id must be set (fallback Discourse category)", 503) if cid <= 0
-
-      bot =
-        begin
-          id = SiteSetting.minicodnav_bot_user_id.to_i
-          id.positive? ? (User.find_by(id: id) || Discourse.system_user) : Discourse.system_user
-        end
-
-      tag = SiteSetting.minicodnav_archived_tag.presence || "minicodnav-archived"
-      new(bot_user: bot, default_category_id: cid, archived_tag: tag)
+      new(bot_user: Discourse.system_user)
     end
 
     def process!(payload)
@@ -95,21 +83,23 @@ module DiscourseMinicodNav
       )
     end
 
-    # Prefer discourse_category_id from Resource Station; then route by source_type; then default.
+    # Prefer payload discourse_category_id; otherwise route by source_type to its configured category.
     def discourse_category_id_for(resource)
       payload_cid = resource["discourse_category_id"].to_i
       return payload_cid if payload_cid.positive?
 
       case resource["source_type"].to_s
       when "pavlovia"
-        pav = SiteSetting.minicodnav_pavlovia_category_id.to_i
-        return pav if pav.positive?
+        cid = SiteSetting.minicodnav_pavlovia_category_id.to_i
+        raise SyncError.new("minicodnav_pavlovia_category_id not set", 503) if cid <= 0
+        cid
       when "journal"
-        jrn = SiteSetting.minicodnav_journal_category_id.to_i
-        return jrn if jrn.positive?
+        cid = SiteSetting.minicodnav_journal_category_id.to_i
+        raise SyncError.new("minicodnav_journal_category_id not set", 503) if cid <= 0
+        cid
+      else
+        raise SyncError.new("unsupported source_type: #{resource["source_type"]}", 400)
       end
-
-      @default_category_id
     end
 
     def upsert_topic!(resource, map, version)
@@ -176,10 +166,6 @@ module DiscourseMinicodNav
       raise SyncError.new("topic not found", 422) unless topic
 
       topic.update_status(:closed, true, @bot_user)
-      tag_ok =
-        DiscourseTagging.tag_topic_by_names(topic, guardian, [@archived_tag], append: true)
-      raise SyncError.new(topic.errors.full_messages.join(", "), 422) unless tag_ok
-
       map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
     end
 
