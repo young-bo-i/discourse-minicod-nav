@@ -104,9 +104,9 @@ module DiscourseMinicodNav
 
     def upsert_topic!(resource, map, version)
       title = resource["title"].to_s
-      raw = resource["rendered_markdown"].to_s
       raise SyncError.new("title required", 422) if title.blank?
-      raise SyncError.new("rendered_markdown required", 422) if raw.blank?
+
+      raw = build_raw(resource)
 
       tags = normalize_tags(Array(resource["tags"]))
       target_category_id = discourse_category_id_for(resource)
@@ -161,6 +161,61 @@ module DiscourseMinicodNav
 
     def enqueue_image_pull(post_id)
       Jobs.enqueue(:minicod_nav_pull_images, post_id: post_id)
+    end
+
+    # Contract v1.4 §3.2 explicitly allows building the post body from structured
+    # fields (`content`, `summary`, `external_url`, ...) instead of upstream's
+    # `rendered_markdown`. We do that so the topic title bar + Discourse tags
+    # aren't duplicated inside the body, and the external link gets human-readable
+    # link text rather than a raw URL.
+    def build_raw(resource)
+      source = resource["source_type"].to_s
+      parts = ["> #{sync_banner(source)}"]
+
+      icon = resource["icon_url"].to_s
+      parts << "![](#{icon})" if icon.present?
+
+      summary = resource["summary"].to_s
+      parts << "**简介:** #{summary}" if summary.present?
+
+      external = resource["external_url"].to_s
+      parts << "[#{external_link_text(source)}](#{external})" if external.present?
+
+      content = resource["content"].to_s
+      if content.present?
+        parts << "## 详细介绍"
+        parts << content
+      end
+
+      screenshots = Array(resource["screenshots"]).reject { |s| s.to_s.blank? }
+      if screenshots.any?
+        parts << "## 截图"
+        screenshots.each { |url| parts << "![](#{url})" }
+      end
+
+      parts.join("\n\n")
+    end
+
+    def sync_banner(source)
+      case source
+      when "pavlovia"
+        "提示:本文由资源站从 **Pavlovia 实验库** 同步,请勿手动编辑正文。"
+      when "journal"
+        "提示:本文由资源站从 **学术底刊** 同步,请勿手动编辑正文。"
+      else
+        "提示:本文由资源站同步,请勿手动编辑正文。"
+      end
+    end
+
+    def external_link_text(source)
+      case source
+      when "pavlovia"
+        "前往 Pavlovia 运行实验"
+      when "journal"
+        "访问期刊主页"
+      else
+        "查看原始页面"
+      end
     end
 
     def archive_topic!(map, version)
