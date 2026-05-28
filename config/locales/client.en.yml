@@ -1,0 +1,18 @@
+en:
+  academic_nav:
+    title: "Academic Nav"
+  js:
+    academic_nav:
+      title: "Academic Nav"
+      refresh: "Refresh"
+      plugin_enabled: "Plugin Enabled"
+      target_category_id: "Target Category ID"
+      map_count: "Mapped Resources"
+      receipts_24h: "Receipts in 24h"
+      latest_maps: "Latest Resource Maps"
+      latest_receipts: "Latest Webhook Receipts"
+  admin_js:
+    admin:
+      site_settings:
+        categories:
+          discourse_academic_nav: "Academic Navigation"

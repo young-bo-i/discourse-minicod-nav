@@ -1,0 +1,80 @@
+<section class="acadnav-admin">
+  <h2>{{i18n "academic_nav.title"}}</h2>
+
+  <div style="margin-bottom: 12px;">
+    <DButton @label="academic_nav.refresh" @action={{this.load}} @disabled={{this.loading}} />
+  </div>
+
+  {{#if this.dashboard}}
+    <table class="topic-list">
+      <tbody>
+        <tr>
+          <td>{{i18n "academic_nav.plugin_enabled"}}</td>
+          <td>{{this.dashboard.plugin_enabled}}</td>
+        </tr>
+        <tr>
+          <td>{{i18n "academic_nav.target_category_id"}}</td>
+          <td>{{this.dashboard.target_category_id}}</td>
+        </tr>
+        <tr>
+          <td>{{i18n "academic_nav.map_count"}}</td>
+          <td>{{this.dashboard.map_count}}</td>
+        </tr>
+        <tr>
+          <td>{{i18n "academic_nav.receipts_24h"}}</td>
+          <td>{{this.dashboard.receipts_24h.total}} (ok={{this.dashboard.receipts_24h.ok}}, skipped={{this.dashboard.receipts_24h.skipped}})</td>
+        </tr>
+      </tbody>
+    </table>
+  {{/if}}
+
+  <h3>{{i18n "academic_nav.latest_maps"}}</h3>
+  <table class="topic-list">
+    <thead>
+      <tr>
+        <th>resource_id</th>
+        <th>topic_id</th>
+        <th>topic_title</th>
+        <th>last_synced_version</th>
+        <th>last_synced_at</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each this.maps as |m|}}
+        <tr>
+          <td>{{m.resource_id}}</td>
+          <td>{{m.topic_id}}</td>
+          <td>{{m.topic_title}}</td>
+          <td>{{m.last_synced_version}}</td>
+          <td>{{m.last_synced_at}}</td>
+        </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <h3>{{i18n "academic_nav.latest_receipts"}}</h3>
+  <table class="topic-list">
+    <thead>
+      <tr>
+        <th>delivery_id</th>
+        <th>event</th>
+        <th>resource_id</th>
+        <th>status</th>
+        <th>duration_ms</th>
+        <th>created_at</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each this.receipts as |r|}}
+        <tr>
+          <td>{{r.delivery_id}}</td>
+          <td>{{r.event}}</td>
+          <td>{{r.resource_id}}</td>
+          <td>{{r.status}}</td>
+          <td>{{r.duration_ms}}</td>
+          <td>{{r.created_at}}</td>
+        </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
