@@ -175,6 +175,16 @@ module DiscourseMinicodNav
       summary = resource["summary"].to_s
       parts << "**简介:** #{summary}" if summary.present?
 
+      # Contract v1.5 §4.5: file_url is the upstream paper PDF (journal only;
+      # pavlovia always sends empty). Bare URL on its own line so any installed
+      # PDF preview / onebox plugin can grab it; the section heading carries the
+      # visible label.
+      file_url = resource["file_url"].to_s
+      if file_url.present?
+        parts << "## 📄 原文 PDF"
+        parts << file_url
+      end
+
       external = resource["external_url"].to_s
       parts << "[#{external_link_text(source)}](#{external})" if external.present?
 
