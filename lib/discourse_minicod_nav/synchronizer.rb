@@ -107,6 +107,7 @@ module DiscourseMinicodNav
       raise SyncError.new("title required", 422) if title.blank?
 
       raw = build_raw(resource)
+      pdf_url = resource["file_url"].to_s.presence
 
       tags = normalize_tags(Array(resource["tags"]))
       target_category_id = discourse_category_id_for(resource)
@@ -130,7 +131,7 @@ module DiscourseMinicodNav
           last_synced_version: version,
           last_synced_at: Time.zone.now,
         )
-        enqueue_image_pull(post.id)
+        enqueue_asset_pull(post.id, pdf_url: pdf_url)
         return
       end
 
@@ -155,12 +156,12 @@ module DiscourseMinicodNav
       end
 
       map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
-      enqueue_image_pull(first_post.id)
+      enqueue_asset_pull(first_post.id, pdf_url: pdf_url)
       map
     end
 
-    def enqueue_image_pull(post_id)
-      Jobs.enqueue(:minicod_nav_pull_images, post_id: post_id)
+    def enqueue_asset_pull(post_id, pdf_url: nil)
+      Jobs.enqueue(:minicod_nav_pull_assets, post_id: post_id, pdf_url: pdf_url)
     end
 
     # Contract v1.4 §3.2 explicitly allows building the post body from structured
