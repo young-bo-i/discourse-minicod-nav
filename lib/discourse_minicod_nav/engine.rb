@@ -8,12 +8,13 @@ module DiscourseMinicodNav
     config.root = File.expand_path("../..", __dir__)
 
     routes do
-      post "/webhook" => "webhooks#create"
+      post "/webhook/:source" => "webhooks#create"
 
       namespace :admin do
         get "/dashboard" => "dashboards#show"
         get "/maps" => "maps#index"
         get "/receipts" => "receipts#index"
+        post "/snapshot/:source/sync" => "snapshots#sync"
       end
     end
   end

@@ -10,6 +10,9 @@ discourse_minicod_nav:
     default: ""
     secret: true
     client: false
+  minicodnav_openscholay_base_url:
+    default: ""
+    client: false
   minicodnav_target_category_id:
     default: 0
     client: false

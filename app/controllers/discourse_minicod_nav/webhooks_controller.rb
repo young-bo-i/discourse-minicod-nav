@@ -30,26 +30,16 @@ module DiscourseMinicodNav
         return render json: { error: "plugin disabled", code: "minicodnav_plugin_disabled" }, status: 403
       end
 
-      raw = request.body.read
-
-      # Parse first (untrusted) to learn source_type; signature still verifies raw bytes.
-      payload =
-        begin
-          JSON.parse(raw)
-        rescue JSON::ParserError
-          return render json: { error: "invalid json" }, status: 400
-        end
-
-      source_type = payload.dig("resource", "source_type").to_s
-      setting_key = SECRET_SETTINGS_BY_SOURCE[source_type]
-      unless setting_key
-        return render json: { error: "unknown source_type" }, status: 401
-      end
+      source = params[:source].to_s
+      setting_key = SECRET_SETTINGS_BY_SOURCE[source]
+      return render json: { error: "unknown source" }, status: 400 unless setting_key
 
       secret = SiteSetting.public_send(setting_key).to_s
       if secret.blank?
         return render json: { error: "#{setting_key} not set" }, status: 503
       end
+
+      raw = request.body.read
 
       unless verify_signature!(raw, secret)
         return render json: { error: "invalid signature" }, status: 401
@@ -61,6 +51,18 @@ module DiscourseMinicodNav
 
       delivery_id = request.headers["X-AcadNav-Delivery"].presence
       return render json: { error: "missing X-AcadNav-Delivery" }, status: 401 if delivery_id.blank?
+
+      payload =
+        begin
+          JSON.parse(raw)
+        rescue JSON::ParserError
+          return render json: { error: "invalid json" }, status: 400
+        end
+
+      body_source = payload.dig("resource", "source_type").to_s
+      if body_source.present? && body_source != source
+        return render json: { error: "source mismatch" }, status: 400
+      end
 
       event = payload["event"].to_s
       resource_id = payload.dig("resource", "id").to_s
