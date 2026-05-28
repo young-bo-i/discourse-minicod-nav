@@ -6,6 +6,36 @@
   </div>
 
   {{#if this.dashboard}}
+    <h3>{{i18n "minicod_nav.webhook_urls"}}</h3>
+    <p class="minicodnav-hint">{{i18n "minicod_nav.webhook_urls_hint"}}</p>
+    <table class="topic-list">
+      <tbody>
+        <tr>
+          <td>pavlovia</td>
+          <td><code>{{this.dashboard.webhook_urls.pavlovia}}</code></td>
+          <td>
+            {{#if this.dashboard.secret_configured.pavlovia}}
+              {{i18n "minicod_nav.secret_set"}}
+            {{else}}
+              <strong>{{i18n "minicod_nav.secret_missing"}}</strong>
+            {{/if}}
+          </td>
+        </tr>
+        <tr>
+          <td>journal</td>
+          <td><code>{{this.dashboard.webhook_urls.journal}}</code></td>
+          <td>
+            {{#if this.dashboard.secret_configured.journal}}
+              {{i18n "minicod_nav.secret_set"}}
+            {{else}}
+              <strong>{{i18n "minicod_nav.secret_missing"}}</strong>
+            {{/if}}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>{{i18n "minicod_nav.status"}}</h3>
     <table class="topic-list">
       <tbody>
         <tr>

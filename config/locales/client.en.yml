@@ -5,12 +5,17 @@ en:
     minicod_nav:
       title: "Minicodhook"
       refresh: "Refresh"
+      status: "Status"
       plugin_enabled: "Plugin Enabled"
       target_category_id: "Target Category ID"
       map_count: "Mapped Resources"
       receipts_24h: "Receipts in 24h"
       latest_maps: "Latest Resource Maps"
       latest_receipts: "Latest Webhook Receipts"
+      webhook_urls: "Webhook endpoints"
+      webhook_urls_hint: "Paste these URLs into the openscholay admin Discourse-sync panels (one per source). Use the same secret that you configure here in this plugin's site settings."
+      secret_set: "secret configured"
+      secret_missing: "secret NOT set"
   admin_js:
     admin:
       site_settings:
