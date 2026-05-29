@@ -219,7 +219,8 @@ module DiscourseMinicodNav
       parts.join("\n\n")
     end
 
-    # Journal body composed from extra.* (contract v1.7 §4.4).
+    # Mirror the openscholay journal detail page layout. PDF section goes last
+    # because the inline preview is visually heavy — readers see metadata first.
     def build_raw_journal(resource)
       extra = resource["extra"].is_a?(Hash) ? resource["extra"] : {}
       parts = []
@@ -227,17 +228,16 @@ module DiscourseMinicodNav
       summary = resource["summary"].to_s
       parts << "**简介:** #{summary}" if summary.present?
 
-      file_url = resource["file_url"].to_s
-      if file_url.present?
-        parts << "## 📄 原文 PDF"
-        parts << file_url
-      end
+      meta = journal_meta_line(extra)
+      parts << meta if meta.present?
 
       external = resource["external_url"].to_s
       parts << "[访问期刊主页](#{external})" if external.present?
 
-      author_block = render_authors(extra["author_list"])
-      parts.concat(author_block) if author_block.any?
+      parts.concat(render_paper_info(extra, resource))
+      parts.concat(render_authors(extra["author_list"]))
+      parts.concat(render_review_stage(extra["review_stage"]))
+      parts.concat(render_quality_scores(extra))
 
       notes = extra["quality_notes"].to_s
       if notes.present?
@@ -245,8 +245,7 @@ module DiscourseMinicodNav
         parts << notes.lines.map { |l| "> #{l.chomp}" }.join("\n")
       end
 
-      score_block = render_quality_scores(extra["quality_scores"])
-      parts.concat(score_block) if score_block.any?
+      parts.concat(render_community_data(extra))
 
       refs = Array(extra["references"]).reject { |r| r.to_s.blank? }
       if refs.any?
@@ -254,7 +253,64 @@ module DiscourseMinicodNav
         refs.each_with_index { |r, i| parts << "#{i + 1}. #{r}" }
       end
 
+      file_url = resource["file_url"].to_s
+      if file_url.present?
+        parts << "## 📄 原文 PDF"
+        parts << file_url
+      end
+
       parts.join("\n\n")
+    end
+
+    REVIEW_STAGES = [
+      { key: "latrine", emoji: "🚽", name: "旱厕(初评)" },
+      { key: "septic_tank", emoji: "🪣", name: "化粪池(进阶)" },
+      { key: "gou_shi", emoji: "🪨", name: "构石(精选发表)" },
+    ].freeze
+
+    # 9-dimension SHIT scoring; Chinese labels mirror openscholay's detail page.
+    DIMENSION_NAMES = {
+      "ER" => "情感共鸣",
+      "HP" => "钩刺指数",
+      "QL" => "金句质量",
+      "NA" => "叙事结构",
+      "AB" => "适用受众",
+      "SR" => "社会切口",
+      "SAT" => "反讽密度",
+      "MS" => "模因可塑性",
+      "TS" => "转发安全度",
+    }.freeze
+
+    def journal_meta_line(extra)
+      bits = []
+
+      stage = REVIEW_STAGES.find { |s| s[:key] == extra["review_stage"].to_s }
+      bits << "#{stage[:emoji]} #{stage[:name]}" if stage
+
+      avg = extra["avg_score"]
+      cnt = extra["rating_count"]
+      bits << "#{cnt} 票均分 #{avg}" if avg.is_a?(Numeric) && cnt.is_a?(Numeric)
+
+      qs = extra["quality_score"]
+      bits << "编委综合分 #{qs}/10" if qs.is_a?(Numeric)
+
+      bits.any? ? bits.join(" · ") : nil
+    end
+
+    def render_paper_info(extra, resource)
+      rows = []
+      rows << "| 发表日期 | #{extra["published_date"]} |" if extra["published_date"].to_s.present?
+      rows << "| 语言 | #{extra["language"]} |" if extra["language"].to_s.present?
+      rows << "| DOI | #{extra["doi"]} |" if extra["doi"].to_s.present?
+      rows << "| 期号 | #{extra["issue_number"]} |" if extra["issue_number"].to_s.present?
+      platforms = Array(extra["source_platforms"]).reject { |p| p.to_s.blank? }
+      rows << "| 来源平台 | #{platforms.join(", ")} |" if platforms.any?
+      published_at = resource["published_at"].to_s
+      rows << "| 本站发布 | #{published_at[0, 10]} |" if published_at.length >= 10
+      return [] if rows.empty?
+
+      table = ["| 字段 | 值 |", "|---|---|", *rows].join("\n")
+      ["## 论文信息", table]
     end
 
     def render_authors(list)
@@ -270,7 +326,7 @@ module DiscourseMinicodNav
         bio = a["bio"].to_s
         primary = a["is_primary"] == true
 
-        header = primary ? "**#{name}** (通讯)" : "**#{name}**"
+        header = primary ? "**#{name}** ★" : "**#{name}**"
         header += " — *#{affiliation}*" if affiliation.present?
         lines << "- #{header}"
         lines << "  > #{bio}" if bio.present?
@@ -278,19 +334,51 @@ module DiscourseMinicodNav
       lines.size > 1 ? [lines.join("\n")] : []
     end
 
-    QUALITY_DIMENSIONS = %w[ER HP QL NA AB SR SAT MS TS].freeze
+    def render_review_stage(stage_key)
+      key = stage_key.to_s
+      return [] if key.blank?
 
-    def render_quality_scores(scores)
+      labels = REVIEW_STAGES.map do |s|
+        label = "#{s[:emoji]} #{s[:name]}"
+        s[:key] == key ? "**#{label}**" : label
+      end
+      ["## SHIT 评审阶段", labels.join(" → ")]
+    end
+
+    def render_quality_scores(extra)
+      scores = extra["quality_scores"]
       return [] unless scores.is_a?(Hash) && scores.any?
 
-      rows = QUALITY_DIMENSIONS.filter_map do |dim|
+      rows = DIMENSION_NAMES.filter_map do |dim, cn|
         v = scores[dim]
-        v.is_a?(Numeric) ? "| #{dim} | #{v} |" : nil
+        v.is_a?(Numeric) ? "| #{dim} | #{cn} | #{v} |" : nil
       end
       return [] if rows.empty?
 
-      table = ["| 维度 | 得分 |", "|---|---:|", *rows].join("\n")
-      ["## SHIT 9 维评分", table]
+      header = ["## 编委 9 维评分"]
+      overall = extra["quality_score"]
+      header << "**综合分: #{overall} / 10**" if overall.is_a?(Numeric)
+
+      table = ["| 维度 | 名称 | 得分 |", "|---|---|---:|", *rows].join("\n")
+      [*header, table]
+    end
+
+    def render_community_data(extra)
+      rows = []
+      avg = extra["avg_score"]
+      cnt = extra["rating_count"]
+      if avg.is_a?(Numeric)
+        suffix = cnt.is_a?(Numeric) ? " (#{cnt} 人参评)" : ""
+        rows << "| 平均评分 | #{avg} / 5#{suffix} |"
+      end
+      comments = extra["comment_count"]
+      rows << "| 评论数 | #{comments} 条 |" if comments.is_a?(Numeric)
+      qs = extra["quality_score"]
+      rows << "| 编委综合分 | #{qs} / 10 |" if qs.is_a?(Numeric)
+      return [] if rows.empty?
+
+      table = ["| 指标 | 值 |", "|---|---:|", *rows].join("\n")
+      ["## 公投与社区数据", table]
     end
 
     def external_link_text(source)
