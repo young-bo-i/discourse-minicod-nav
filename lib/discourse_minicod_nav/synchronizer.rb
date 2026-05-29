@@ -131,6 +131,7 @@ module DiscourseMinicodNav
           last_synced_version: version,
           last_synced_at: Time.zone.now,
         )
+        apply_seo!(topic, resource)
         enqueue_asset_pull(post.id, pdf_url: pdf_url)
         return
       end
@@ -156,30 +157,50 @@ module DiscourseMinicodNav
       end
 
       map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
+      apply_seo!(topic, resource)
       enqueue_asset_pull(first_post.id, pdf_url: pdf_url)
       map
+    end
+
+    # Contract v1.6 §4.6: write upstream-curated SEO into topic custom fields
+    # so plugin.rb's html_builder hook can emit them as <meta> tags.
+    def apply_seo!(topic, resource)
+      seo = resource["seo"]
+      return unless seo.is_a?(Hash)
+
+      cf = topic.custom_fields
+      cf["minicodnav_meta_description"] = seo["description"].to_s if seo["description"].to_s.present?
+      cf["minicodnav_og_title"] = seo["title"].to_s if seo["title"].to_s.present?
+      cf["minicodnav_og_image"] = seo["og_image"].to_s if seo["og_image"].to_s.present?
+      keywords = Array(seo["keywords"]).reject { |k| k.to_s.blank? }
+      cf["minicodnav_meta_keywords"] = keywords.join(", ") if keywords.any?
+      topic.save_custom_fields(true)
     end
 
     def enqueue_asset_pull(post_id, pdf_url: nil)
       Jobs.enqueue(:minicod_nav_pull_assets, post_id: post_id, pdf_url: pdf_url)
     end
 
-    # Contract v1.4 §3.2 explicitly allows building the post body from structured
-    # fields (`content`, `summary`, `external_url`, ...) instead of upstream's
-    # `rendered_markdown`. We do that so the topic title bar + Discourse tags
-    # aren't duplicated inside the body, and the external link gets human-readable
-    # link text rather than a raw URL.
+    # Contract v1.4 §3.2 allows building the post body from structured fields.
+    # v1.7/v1.8: journal payloads no longer ship a ready-to-use markdown content
+    # block; that data is now spread across extra.* fields, so journal posts
+    # render from structured fields. Pavlovia still has a clean content field.
     def build_raw(resource)
+      case resource["source_type"].to_s
+      when "journal"
+        build_raw_journal(resource)
+      else
+        build_raw_default(resource)
+      end
+    end
+
+    def build_raw_default(resource)
       source = resource["source_type"].to_s
       parts = []
 
       summary = resource["summary"].to_s
       parts << "**简介:** #{summary}" if summary.present?
 
-      # Contract v1.5 §4.5: file_url is the upstream paper PDF (journal only;
-      # pavlovia always sends empty). Bare URL on its own line so any installed
-      # PDF preview / onebox plugin can grab it; the section heading carries the
-      # visible label.
       file_url = resource["file_url"].to_s
       if file_url.present?
         parts << "## 📄 原文 PDF"
@@ -196,6 +217,80 @@ module DiscourseMinicodNav
       end
 
       parts.join("\n\n")
+    end
+
+    # Journal body composed from extra.* (contract v1.7 §4.4).
+    def build_raw_journal(resource)
+      extra = resource["extra"].is_a?(Hash) ? resource["extra"] : {}
+      parts = []
+
+      summary = resource["summary"].to_s
+      parts << "**简介:** #{summary}" if summary.present?
+
+      file_url = resource["file_url"].to_s
+      if file_url.present?
+        parts << "## 📄 原文 PDF"
+        parts << file_url
+      end
+
+      external = resource["external_url"].to_s
+      parts << "[访问期刊主页](#{external})" if external.present?
+
+      author_block = render_authors(extra["author_list"])
+      parts.concat(author_block) if author_block.any?
+
+      notes = extra["quality_notes"].to_s
+      if notes.present?
+        parts << "## 编委评注"
+        parts << notes.lines.map { |l| "> #{l.chomp}" }.join("\n")
+      end
+
+      score_block = render_quality_scores(extra["quality_scores"])
+      parts.concat(score_block) if score_block.any?
+
+      refs = Array(extra["references"]).reject { |r| r.to_s.blank? }
+      if refs.any?
+        parts << "## 参考文献"
+        refs.each_with_index { |r, i| parts << "#{i + 1}. #{r}" }
+      end
+
+      parts.join("\n\n")
+    end
+
+    def render_authors(list)
+      authors = Array(list).select { |a| a.is_a?(Hash) }
+      return [] if authors.empty?
+
+      lines = ["## 作者"]
+      authors.each do |a|
+        name = a["name"].to_s
+        next if name.blank?
+
+        affiliation = a["affiliation"].to_s
+        bio = a["bio"].to_s
+        primary = a["is_primary"] == true
+
+        header = primary ? "**#{name}** (通讯)" : "**#{name}**"
+        header += " — *#{affiliation}*" if affiliation.present?
+        lines << "- #{header}"
+        lines << "  > #{bio}" if bio.present?
+      end
+      lines.size > 1 ? [lines.join("\n")] : []
+    end
+
+    QUALITY_DIMENSIONS = %w[ER HP QL NA AB SR SAT MS TS].freeze
+
+    def render_quality_scores(scores)
+      return [] unless scores.is_a?(Hash) && scores.any?
+
+      rows = QUALITY_DIMENSIONS.filter_map do |dim|
+        v = scores[dim]
+        v.is_a?(Numeric) ? "| #{dim} | #{v} |" : nil
+      end
+      return [] if rows.empty?
+
+      table = ["| 维度 | 得分 |", "|---|---:|", *rows].join("\n")
+      ["## SHIT 9 维评分", table]
     end
 
     def external_link_text(source)
