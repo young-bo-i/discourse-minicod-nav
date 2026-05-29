@@ -219,37 +219,35 @@ module DiscourseMinicodNav
       parts.join("\n\n")
     end
 
-    # Mirror the openscholay journal detail page layout. PDF section goes last
-    # because the inline preview is visually heavy — readers see metadata first.
+    # Mirror the openscholay journal detail page. Heavy secondary tables go
+    # into [details] collapsibles so the first view stays scannable; PDF inline
+    # preview sits at the end so it doesn't push everything below the fold.
     def build_raw_journal(resource)
       extra = resource["extra"].is_a?(Hash) ? resource["extra"] : {}
       parts = []
 
       summary = resource["summary"].to_s
-      parts << "**简介:** #{summary}" if summary.present?
-
-      meta = journal_meta_line(extra)
-      parts << meta if meta.present?
+      parts << summary if summary.present?
 
       external = resource["external_url"].to_s
-      parts << "[访问期刊主页](#{external})" if external.present?
+      parts << "[🔗 访问期刊主页](#{external})" if external.present?
 
-      parts.concat(render_paper_info(extra, resource))
       parts.concat(render_authors(extra["author_list"]))
       parts.concat(render_review_stage(extra["review_stage"]))
-      parts.concat(render_quality_scores(extra))
+      parts.concat(render_quality_score_section(extra))
 
       notes = extra["quality_notes"].to_s
       if notes.present?
-        parts << "## 编委评注"
+        parts << "## 💬 编委评注"
         parts << notes.lines.map { |l| "> #{l.chomp}" }.join("\n")
       end
 
-      parts.concat(render_community_data(extra))
+      parts.concat(render_journal_details_drawer(extra, resource))
+      parts.concat(render_community_drawer(extra))
 
       refs = Array(extra["references"]).reject { |r| r.to_s.blank? }
       if refs.any?
-        parts << "## 参考文献"
+        parts << "## 📚 参考文献"
         refs.each_with_index { |r, i| parts << "#{i + 1}. #{r}" }
       end
 
@@ -281,43 +279,11 @@ module DiscourseMinicodNav
       "TS" => "转发安全度",
     }.freeze
 
-    def journal_meta_line(extra)
-      bits = []
-
-      stage = REVIEW_STAGES.find { |s| s[:key] == extra["review_stage"].to_s }
-      bits << "#{stage[:emoji]} #{stage[:name]}" if stage
-
-      avg = extra["avg_score"]
-      cnt = extra["rating_count"]
-      bits << "#{cnt} 票均分 #{avg}" if avg.is_a?(Numeric) && cnt.is_a?(Numeric)
-
-      qs = extra["quality_score"]
-      bits << "编委综合分 #{qs}/10" if qs.is_a?(Numeric)
-
-      bits.any? ? bits.join(" · ") : nil
-    end
-
-    def render_paper_info(extra, resource)
-      rows = []
-      rows << "| 发表日期 | #{extra["published_date"]} |" if extra["published_date"].to_s.present?
-      rows << "| 语言 | #{extra["language"]} |" if extra["language"].to_s.present?
-      rows << "| DOI | #{extra["doi"]} |" if extra["doi"].to_s.present?
-      rows << "| 期号 | #{extra["issue_number"]} |" if extra["issue_number"].to_s.present?
-      platforms = Array(extra["source_platforms"]).reject { |p| p.to_s.blank? }
-      rows << "| 来源平台 | #{platforms.join(", ")} |" if platforms.any?
-      published_at = resource["published_at"].to_s
-      rows << "| 本站发布 | #{published_at[0, 10]} |" if published_at.length >= 10
-      return [] if rows.empty?
-
-      table = ["| 字段 | 值 |", "|---|---|", *rows].join("\n")
-      ["## 论文信息", table]
-    end
-
     def render_authors(list)
       authors = Array(list).select { |a| a.is_a?(Hash) }
       return [] if authors.empty?
 
-      lines = ["## 作者"]
+      lines = ["## 👥 作者"]
       authors.each do |a|
         name = a["name"].to_s
         next if name.blank?
@@ -342,10 +308,12 @@ module DiscourseMinicodNav
         label = "#{s[:emoji]} #{s[:name]}"
         s[:key] == key ? "**#{label}**" : label
       end
-      ["## SHIT 评审阶段", labels.join(" → ")]
+      ["## 🪜 SHIT 评审阶段", labels.join(" → ")]
     end
 
-    def render_quality_scores(extra)
+    # Inline: overall score as the heading. 9-dim breakdown table goes inside
+    # a [details] so the first view isn't dominated by 9 rows of numbers.
+    def render_quality_score_section(extra)
       scores = extra["quality_scores"]
       return [] unless scores.is_a?(Hash) && scores.any?
 
@@ -355,30 +323,41 @@ module DiscourseMinicodNav
       end
       return [] if rows.empty?
 
-      header = ["## 编委 9 维评分"]
       overall = extra["quality_score"]
-      header << "**综合分: #{overall} / 10**" if overall.is_a?(Numeric)
-
+      heading = overall.is_a?(Numeric) ? "## 📊 编委综合分: #{overall} / 10" : "## 📊 编委 9 维评分"
       table = ["| 维度 | 名称 | 得分 |", "|---|---|---:|", *rows].join("\n")
-      [*header, table]
+
+      [heading, "[details=展开 9 维评分明细]\n#{table}\n[/details]"]
     end
 
-    def render_community_data(extra)
-      rows = []
+    def render_journal_details_drawer(extra, resource)
+      lines = []
+      lines << "- **发表日期**: #{extra["published_date"]}" if extra["published_date"].to_s.present?
+      lines << "- **语言**: #{extra["language"]}" if extra["language"].to_s.present?
+      lines << "- **DOI**: #{extra["doi"]}" if extra["doi"].to_s.present?
+      lines << "- **期号**: #{extra["issue_number"]}" if extra["issue_number"].to_s.present?
+      platforms = Array(extra["source_platforms"]).reject { |p| p.to_s.blank? }
+      lines << "- **来源平台**: #{platforms.join(", ")}" if platforms.any?
+      published_at = resource["published_at"].to_s
+      lines << "- **本站发布**: #{published_at[0, 10]}" if published_at.length >= 10
+      return [] if lines.empty?
+
+      ["[details=📋 论文详情]\n#{lines.join("\n")}\n[/details]"]
+    end
+
+    def render_community_drawer(extra)
+      lines = []
       avg = extra["avg_score"]
       cnt = extra["rating_count"]
       if avg.is_a?(Numeric)
         suffix = cnt.is_a?(Numeric) ? " (#{cnt} 人参评)" : ""
-        rows << "| 平均评分 | #{avg} / 5#{suffix} |"
+        lines << "- **平均评分**: #{avg} / 5#{suffix}"
       end
       comments = extra["comment_count"]
-      rows << "| 评论数 | #{comments} 条 |" if comments.is_a?(Numeric)
-      qs = extra["quality_score"]
-      rows << "| 编委综合分 | #{qs} / 10 |" if qs.is_a?(Numeric)
-      return [] if rows.empty?
+      lines << "- **评论数**: #{comments} 条" if comments.is_a?(Numeric)
+      return [] if lines.empty?
 
-      table = ["| 指标 | 值 |", "|---|---:|", *rows].join("\n")
-      ["## 公投与社区数据", table]
+      ["[details=💯 公投与社区数据]\n#{lines.join("\n")}\n[/details]"]
     end
 
     def external_link_text(source)
