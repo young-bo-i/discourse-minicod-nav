@@ -31,6 +31,7 @@ module Jobs
     MAX_IMAGE_BYTES = 20 * 1024 * 1024
     MAX_PDF_BYTES = 60 * 1024 * 1024
     CHUNK_SIZE = 64 * 1024
+    MAX_REDIRECTS = 3
 
     class AssetTooBig < StandardError
     end
@@ -104,39 +105,49 @@ module Jobs
     end
 
     def pull(url, user_id, max_bytes)
-      uri = URI.parse(url)
-      return nil unless uri.is_a?(URI::HTTP)
+      current_url = url
+      final_uri = nil
+      tempfile = nil
 
-      tempfile = Tempfile.new(["minicodnav", File.extname(uri.path).presence || ".bin"])
-      tempfile.binmode
-      total = 0
-      upload = nil
-
-      http_for(uri).request(Net::HTTP::Get.new(uri.request_uri)) do |response|
-        raise AssetFetchFailed, "status #{response.code}" unless response.is_a?(Net::HTTPSuccess)
-
-        cl = response.content_length
-        raise AssetTooBig, "content-length #{cl} > #{max_bytes}" if cl && cl > max_bytes
-
-        response.read_body do |chunk|
-          total += chunk.bytesize
-          raise AssetTooBig, "stream exceeded #{max_bytes} bytes" if total > max_bytes
-          tempfile.write(chunk)
+      (MAX_REDIRECTS + 1).times do |hop|
+        uri = URI.parse(current_url)
+        unless uri.is_a?(URI::HTTP)
+          Rails.logger.warn("[minicodnav] asset pull #{url}: non-http URI after #{hop} hops (#{current_url})")
+          return nil
         end
+
+        redirect_target = nil
+
+        http_for(uri).request(Net::HTTP::Get.new(uri.request_uri)) do |response|
+          case response
+          when Net::HTTPSuccess
+            tempfile = stream_to_tempfile(response, uri, max_bytes)
+            final_uri = uri
+          when Net::HTTPRedirection
+            redirect_target = response["location"]
+          else
+            Rails.logger.warn(
+              "[minicodnav] asset #{url}: HTTP #{response.code} #{response.message}" \
+                "#{hop.positive? ? " after #{hop} redirect(s)" : ""}",
+            )
+            return nil
+          end
+        end
+
+        if tempfile
+          return upload_from_tempfile(tempfile, final_uri, url, user_id)
+        end
+
+        unless redirect_target
+          Rails.logger.warn("[minicodnav] asset #{url}: redirect without Location header")
+          return nil
+        end
+
+        current_url = URI.join(current_url, redirect_target).to_s
       end
 
-      tempfile.rewind
-      basename = File.basename(uri.path)
-      basename = "asset#{File.extname(uri.path)}" if basename.blank?
-
-      owner = user_id || Discourse.system_user.id
-      upload = UploadCreator.new(tempfile, basename, origin: url).create_for(owner)
-
-      unless upload&.persisted?
-        errors = upload&.errors&.full_messages&.join(", ").presence || "unknown UploadCreator failure"
-        Rails.logger.warn("[minicodnav] upload rejected for #{url}: #{errors}")
-      end
-      upload
+      Rails.logger.warn("[minicodnav] asset #{url}: gave up after #{MAX_REDIRECTS} redirects (last hop: #{current_url})")
+      nil
     rescue AssetTooBig => e
       Rails.logger.warn("[minicodnav] asset too big — #{url}: #{e.message}")
       nil
@@ -145,6 +156,43 @@ module Jobs
       nil
     ensure
       tempfile&.close!
+    end
+
+    def stream_to_tempfile(response, uri, max_bytes)
+      cl = response.content_length
+      raise AssetTooBig, "content-length #{cl} > #{max_bytes}" if cl && cl > max_bytes
+
+      tf = Tempfile.new(["minicodnav", File.extname(uri.path).presence || ".bin"])
+      tf.binmode
+      total = 0
+
+      begin
+        response.read_body do |chunk|
+          total += chunk.bytesize
+          raise AssetTooBig, "stream exceeded #{max_bytes} bytes" if total > max_bytes
+          tf.write(chunk)
+        end
+      rescue StandardError
+        tf.close!
+        raise
+      end
+
+      tf.rewind
+      tf
+    end
+
+    def upload_from_tempfile(tempfile, uri, origin_url, user_id)
+      basename = File.basename(uri.path)
+      basename = "asset#{File.extname(uri.path)}" if basename.blank?
+
+      owner = user_id || Discourse.system_user.id
+      upload = UploadCreator.new(tempfile, basename, origin: origin_url).create_for(owner)
+
+      unless upload&.persisted?
+        errors = upload&.errors&.full_messages&.join(", ").presence || "unknown UploadCreator failure"
+        Rails.logger.warn("[minicodnav] upload rejected for #{origin_url}: #{errors}")
+      end
+      upload
     end
 
     def http_for(uri)
