@@ -51,6 +51,38 @@ after_initialize do
     end,
   )
 
+  # Per-IP allowlist for upstream openscholay hosts. Parsed once at register
+  # time + cached in a thread-local lambda so the per-request callback is just
+  # a single Array#any? on parsed IPAddr objects (no SiteSetting hit, no
+  # IPAddr.new on the hot path). Operator updates the setting → operator
+  # rebuilds / restarts to pick it up (this matches Discourse's own
+  # STATIC_IP_SKIPPER lifecycle from DISCOURSE_MAX_REQS_PER_IP_EXCEPTIONS).
+  begin
+    raw = SiteSetting.minicodnav_upstream_ip_allowlist.to_s
+    entries = raw.split(/[,\s]+/).reject(&:blank?)
+    parsed = entries.filter_map do |entry|
+      begin
+        IPAddr.new(entry)
+      rescue IPAddr::InvalidAddressError
+        Rails.logger.warn("[minicodnav] invalid upstream IP allowlist entry: #{entry}")
+        nil
+      end
+    end
+
+    if parsed.any? && !Middleware::RequestTracker.ip_skipper
+      Middleware::RequestTracker.register_ip_skipper do |ip|
+        begin
+          addr = IPAddr.new(ip)
+          parsed.any? { |range| range.include?(addr) }
+        rescue StandardError
+          false
+        end
+      end
+    end
+  rescue StandardError => e
+    Rails.logger.warn("[minicodnav] could not register upstream IP skipper: #{e.class}: #{e.message}")
+  end
+
   # Mount a small Rails::Engine (same pattern as discourse-poll) so the route is registered
   # reliably; a bare `post` inside `routes.append` was not matching and returned HTML 404.
   Discourse::Application.routes.append { mount DiscourseMinicodNav::Engine, at: "/minicod-nav" }
