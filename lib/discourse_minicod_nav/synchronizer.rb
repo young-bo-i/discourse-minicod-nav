@@ -37,6 +37,20 @@ module DiscourseMinicodNav
       resource_id = resource["id"].to_s
       raise SyncError.new("resource.id missing", 400) if resource_id.blank?
 
+      # Per-resource lock: bulk imports from upstream can land created/updated
+      # for the same resource_id on different Sidekiq workers within
+      # milliseconds. Without this, both workers see map.nil? and both try to
+      # PostCreator + ResourceMap.create!, with the loser hitting
+      # RecordNotUnique. With it, the loser waits, then takes the update
+      # branch (and probably short-circuits on raw_sha1).
+      DistributedMutex.synchronize("minicodnav_sync_#{resource_id}", validity: 5.minutes) do
+        apply_event!(event, version, resource, resource_id)
+      end
+    end
+
+    private
+
+    def apply_event!(event, version, resource, resource_id)
       map = ResourceMap.find_by(resource_id: resource_id) || adopt_existing_topic(resource_id, resource)
 
       if map && version.positive? && version < map.last_synced_version
@@ -56,8 +70,6 @@ module DiscourseMinicodNav
 
       { ok: true }
     end
-
-    private
 
     def guardian
       @guardian ||= Guardian.new(@bot_user)
@@ -112,6 +124,7 @@ module DiscourseMinicodNav
       pdf_url = resource["file_url"].to_s.presence
 
       tags = normalize_tags(Array(resource["tags"]))
+      ensure_tags_exist!(tags) if tags.any?
       target_category_id = discourse_category_id_for(resource)
       fingerprint = topic_fingerprint(title, raw, tags, target_category_id)
 
@@ -495,6 +508,39 @@ module DiscourseMinicodNav
       max = SiteSetting.max_tags_per_topic.to_i
       max = 5 if max <= 0
       tags.map(&:to_s).map(&:strip).reject(&:blank?).uniq.take(max)
+    end
+
+    # Atomic best-effort pre-create using PostgreSQL ON CONFLICT DO NOTHING.
+    # 100 webhooks simultaneously inserting "hardcore" all succeed at the DB
+    # level: one row is created, the other 99 conflict-skip silently — no
+    # exceptions thrown, no SAVEPOINT churn. Discourse's PostCreator then
+    # finds the tag instead of trying to create it itself, which is the path
+    # that surfaced RecordNotUnique inside PostCreator's tag handler.
+    def ensure_tags_exist!(tag_names)
+      return if tag_names.empty?
+
+      cleaned = tag_names.filter_map { |n| clean_tag_name(n) }.reject(&:blank?).uniq
+      return if cleaned.empty?
+
+      now = Time.zone.now
+      records = cleaned.map { |name| { name: name, created_at: now, updated_at: now } }
+      Tag.insert_all(records, unique_by: :name)
+    rescue StandardError => e
+      # Don't fail the upsert if pre-create blows up (e.g. schema mismatch
+      # on a future Discourse upgrade). The retry path in
+      # MinicodNavProcessWebhook + per-resource mutex still cover us.
+      Rails.logger.warn("[minicodnav] tag pre-create skipped: #{e.class}: #{e.message}")
+    end
+
+    def clean_tag_name(name)
+      s = name.to_s.strip
+      return nil if s.blank?
+
+      if defined?(DiscourseTagging) && DiscourseTagging.respond_to?(:clean_tag)
+        DiscourseTagging.clean_tag(s)
+      else
+        s.downcase
+      end
     end
   end
 end
