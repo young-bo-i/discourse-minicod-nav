@@ -7,7 +7,17 @@ module DiscourseMinicodNav
 
       def show
         range = 24.hours.ago..Time.zone.now
-        receipts = WebhookReceipt.where(created_at: range)
+
+        # One indexed scan over (status, created_at) instead of three separate
+        # COUNTs. Status buckets may include "queued" / "ok" / "skipped" /
+        # "error" — sum gives the total.
+        by_status = WebhookReceipt.where(created_at: range).group(:status).count
+        ok = by_status["ok"].to_i
+        skipped = by_status["skipped"].to_i
+        queued = by_status["queued"].to_i
+        errored = by_status["error"].to_i
+        total = by_status.values.sum
+
         base = Discourse.base_url
         render json: {
           plugin_enabled: SiteSetting.minicodnav_plugin_enabled,
@@ -21,9 +31,11 @@ module DiscourseMinicodNav
           },
           map_count: ResourceMap.count,
           receipts_24h: {
-            ok: receipts.where(status: "ok").count,
-            skipped: receipts.where(status: "skipped").count,
-            total: receipts.count,
+            ok: ok,
+            skipped: skipped,
+            queued: queued,
+            error: errored,
+            total: total,
           },
           last_receipt_at: WebhookReceipt.maximum(:created_at),
         }

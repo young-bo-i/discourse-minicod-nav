@@ -146,14 +146,13 @@ module DiscourseMinicodNav
       first_post = topic.first_post
       raise SyncError.new("first post not found", 422) unless first_post
 
+      # Route tags through PostRevisor so the noop-fast-path skips the (~6-10
+      # query) DiscourseTagging round-trip when the set hasn't changed.
       revisor = PostRevisor.new(first_post, topic)
-      unless revisor.revise!(@bot_user, { raw: raw, title: title }, { skip_validations: true })
+      revise_attrs = { raw: raw, title: title }
+      revise_attrs[:tags] = tags if tags.present?
+      unless revisor.revise!(@bot_user, revise_attrs, { skip_validations: true })
         raise SyncError.new(first_post.errors.full_messages.join(", "), 422)
-      end
-
-      if tags.present?
-        tag_ok = DiscourseTagging.tag_topic_by_names(topic, guardian, tags)
-        raise SyncError.new(topic.errors.full_messages.join(", "), 422) unless tag_ok
       end
 
       map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
@@ -174,7 +173,10 @@ module DiscourseMinicodNav
       cf["minicodnav_og_image"] = seo["og_image"].to_s if seo["og_image"].to_s.present?
       keywords = Array(seo["keywords"]).reject { |k| k.to_s.blank? }
       cf["minicodnav_meta_keywords"] = keywords.join(", ") if keywords.any?
-      topic.save_custom_fields(true)
+      # save_custom_fields (no force=true) skips when nothing changed since
+      # the topic was loaded; avoids 2 SELECTs + 1 redundant UPDATE on
+      # idempotent webhook replays.
+      topic.save_custom_fields
     end
 
     # Only enqueue if the rendered raw still contains upstream URLs that need

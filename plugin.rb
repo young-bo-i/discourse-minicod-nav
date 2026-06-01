@@ -27,7 +27,16 @@ SEO_CUSTOM_FIELDS = %w[
 after_initialize do
   add_admin_route "minicod_nav.title", "minicod-nav"
 
-  SEO_CUSTOM_FIELDS.each { |f| Topic.register_custom_field_type(f, :string) }
+  # register_custom_field_type — typed access on the model.
+  # register_topic_preloaded_custom_field — adds the field to TopicView's eager
+  # custom-fields preload so the html_builder hook below reads them off the
+  # already-loaded topic. Without this, every topic page view (synced or not)
+  # issued an extra SELECT FROM topic_custom_fields just for the hook to find
+  # that the topic doesn't have any of these keys.
+  SEO_CUSTOM_FIELDS.each do |f|
+    Topic.register_custom_field_type(f, :string)
+    register_topic_preloaded_custom_field(f) if respond_to?(:register_topic_preloaded_custom_field)
+  end
 
   # Resource Station Outbox may burst hundreds of signed POSTs during load tests.
   # Skip Discourse global IP rate limits for this server-to-server endpoint only.
