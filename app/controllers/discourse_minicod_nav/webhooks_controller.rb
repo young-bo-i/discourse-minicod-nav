@@ -25,6 +25,10 @@ module DiscourseMinicodNav
       head :service_unavailable
     end
 
+    # Ack-and-defer: do only signature / timestamp / dedup checks in the request
+    # thread; persist the raw payload and hand processing to Sidekiq. Upstream
+    # uses a 1m→6h backoff on non-2xx; keeping this path sub-millisecond avoids
+    # cascading retries during Outbox bursts.
     def create
       unless SiteSetting.minicodnav_plugin_enabled
         return render json: { error: "plugin disabled", code: "minicodnav_plugin_disabled" }, status: 403
@@ -52,6 +56,11 @@ module DiscourseMinicodNav
       delivery_id = request.headers["X-AcadNav-Delivery"].presence
       return render json: { error: "missing X-AcadNav-Delivery" }, status: 401 if delivery_id.blank?
 
+      # Cheap idempotency short-circuit — skip JSON parse + DB writes on replays.
+      if WebhookReceipt.exists?(delivery_id: delivery_id)
+        return render json: { ok: true, deduped: true }, status: 200
+      end
+
       payload =
         begin
           JSON.parse(raw)
@@ -66,32 +75,31 @@ module DiscourseMinicodNav
 
       event = payload["event"].to_s
       resource_id = payload.dig("resource", "id").to_s
-      start_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-      begin
-        ActiveRecord::Base.transaction do
-          result = DiscourseMinicodNav::Synchronizer.from_site_settings.process!(payload)
-          elapsed_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_at) * 1000).to_i
+      receipt =
+        begin
           WebhookReceipt.create!(
             delivery_id: delivery_id,
             event: event,
             resource_id: resource_id.presence,
-            status: result[:skipped] ? "skipped" : "ok",
-            duration_ms: elapsed_ms,
+            status: "queued",
+            payload: raw,
             created_at: Time.zone.now,
           )
+        rescue ActiveRecord::RecordNotUnique
+          # Lost a race with a concurrent delivery of the same id — still success.
+          return render json: { ok: true, deduped: true }, status: 200
         end
-      rescue ActiveRecord::RecordNotUnique
-        return render json: { ok: true, deduped: true }, status: 200
-      end
 
-      render json: { ok: true }, status: 200
-    rescue DiscourseMinicodNav::SyncError => e
-      Rails.logger.warn("[minicodnav] sync error: #{e.message}")
-      render json: { error: e.message }, status: e.status
+      Jobs.enqueue(:minicod_nav_process_webhook, receipt_id: receipt.id)
+
+      render json: { ok: true, queued: true }, status: 200
     rescue StandardError => e
-      Rails.logger.error("[minicodnav] #{e.class}: #{e.message}\n#{e.backtrace&.first(12)&.join("\n")}")
-      render json: { error: "internal error", exception: e.class.name, message: e.message }, status: 500
+      Rails.logger.error(
+        "[minicodnav] webhook receive error: #{e.class}: #{e.message}\n" \
+          "#{e.backtrace&.first(6)&.join("\n")}",
+      )
+      render json: { error: "internal error" }, status: 500
     end
 
     private
