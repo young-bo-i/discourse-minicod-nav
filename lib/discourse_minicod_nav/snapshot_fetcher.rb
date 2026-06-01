@@ -66,7 +66,9 @@ module DiscourseMinicodNav
               next
             end
 
+            attempts = 0
             begin
+              attempts += 1
               ActiveRecord::Base.transaction do
                 result = synchronizer.process!(evt)
                 result[:skipped] ? (new_skipped += 1) : (new_applied += 1)
@@ -76,6 +78,16 @@ module DiscourseMinicodNav
               Rails.logger.warn(
                 "[minicodnav] snapshot #{@source} item failed: " \
                   "resource_id=#{resource_id} #{e.message}",
+              )
+            rescue ActiveRecord::RecordNotUnique => e
+              if attempts < 3
+                sleep(0.1 + rand(0.2))
+                retry
+              end
+              new_failed += 1
+              Rails.logger.warn(
+                "[minicodnav] snapshot #{@source} item race exhausted: " \
+                  "resource_id=#{resource_id} #{e.message.lines.first&.chomp}",
               )
             end
           end

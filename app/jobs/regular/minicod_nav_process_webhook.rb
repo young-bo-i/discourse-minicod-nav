@@ -9,6 +9,8 @@ module Jobs
   class MinicodNavProcessWebhook < ::Jobs::Base
     sidekiq_options queue: "low"
 
+    MAX_RACE_RETRIES = 3
+
     def execute(args)
       receipt = DiscourseMinicodNav::WebhookReceipt.find_by(id: args[:receipt_id])
       return unless receipt
@@ -21,8 +23,10 @@ module Jobs
       end
 
       start_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      attempts = 0
 
       begin
+        attempts += 1
         payload = JSON.parse(payload_raw)
         result = DiscourseMinicodNav::Synchronizer.from_site_settings.process!(payload)
         finalize!(
@@ -36,6 +40,31 @@ module Jobs
         finalize!(receipt, status: "error", message: e.message, start_at: start_at)
       rescue JSON::ParserError => e
         finalize!(receipt, status: "error", message: "invalid json: #{e.message}", start_at: start_at)
+      rescue ActiveRecord::RecordNotUnique => e
+        # Concurrent webhooks can race on shared rows — most commonly the
+        # Tag(name:) unique index when two journals share a keyword, or
+        # ResourceMap(resource_id:) when created+updated for the same resource
+        # land in parallel workers. Discourse's internal find_or_create paths
+        # don't always recover; inline retry with jitter does, because the
+        # race winner has already committed by the time we retry.
+        if attempts < MAX_RACE_RETRIES
+          delay = 0.1 + (attempts * 0.15) + rand(0.2)
+          Rails.logger.info(
+            "[minicodnav] record race in job (attempt #{attempts}/#{MAX_RACE_RETRIES}): " \
+              "#{e.message.lines.first&.chomp}",
+          )
+          sleep(delay)
+          retry
+        end
+        Rails.logger.warn(
+          "[minicodnav] record race exhausted after #{attempts} attempts: #{e.message}",
+        )
+        finalize!(
+          receipt,
+          status: "error",
+          message: "record race: #{e.message}",
+          start_at: start_at,
+        )
       rescue StandardError => e
         Rails.logger.error(
           "[minicodnav] internal error in job: #{e.class}: #{e.message}\n" \
