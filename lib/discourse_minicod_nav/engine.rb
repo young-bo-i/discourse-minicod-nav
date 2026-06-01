@@ -14,7 +14,8 @@ module DiscourseMinicodNav
         get "/dashboard" => "dashboards#show"
         get "/maps" => "maps#index"
         get "/receipts" => "receipts#index"
-        post "/snapshot/:source/sync" => "snapshots#sync"
+        get "/snapshots/:source" => "snapshots#show"
+        post "/snapshots/:source" => "snapshots#create"
       end
     end
   end

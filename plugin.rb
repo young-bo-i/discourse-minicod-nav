@@ -11,6 +11,7 @@ enabled_site_setting :minicodnav_plugin_enabled
 require_relative "lib/discourse_minicod_nav/engine"
 require_relative "lib/discourse_minicod_nav/resource_map"
 require_relative "lib/discourse_minicod_nav/webhook_receipt"
+require_relative "lib/discourse_minicod_nav/snapshot_run"
 require_relative "lib/discourse_minicod_nav/synchronizer"
 require_relative "lib/discourse_minicod_nav/snapshot_fetcher"
 
