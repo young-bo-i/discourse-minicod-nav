@@ -51,7 +51,21 @@ module DiscourseMinicodNav
           new_skipped = 0
           new_failed = 0
 
+          # Batch short-circuit: one indexed SELECT per page replaces the per-item
+          # ResourceMap.find_by + transaction overhead that Synchronizer.process!
+          # would do for items already at our version (the common case on
+          # repeated snapshot reconciliation).
+          known_versions = fetch_known_versions(items)
+
           items.each do |evt|
+            resource_id = evt.dig("resource", "id").to_s
+            event_version = evt["version"].to_i
+
+            if event_version.positive? && (known = known_versions[resource_id]) && event_version <= known
+              new_skipped += 1
+              next
+            end
+
             begin
               ActiveRecord::Base.transaction do
                 result = synchronizer.process!(evt)
@@ -61,7 +75,7 @@ module DiscourseMinicodNav
               new_failed += 1
               Rails.logger.warn(
                 "[minicodnav] snapshot #{@source} item failed: " \
-                  "resource_id=#{evt.dig("resource", "id")} #{e.message}",
+                  "resource_id=#{resource_id} #{e.message}",
               )
             end
           end
@@ -85,6 +99,13 @@ module DiscourseMinicodNav
       end
 
       snapshot_run
+    end
+
+    def fetch_known_versions(items)
+      ids = items.filter_map { |evt| evt.dig("resource", "id").to_s.presence }.uniq
+      return {} if ids.empty?
+
+      ResourceMap.where(resource_id: ids).pluck(:resource_id, :last_synced_version).to_h
     end
 
     def call

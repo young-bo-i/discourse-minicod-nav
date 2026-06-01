@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 module DiscourseMinicodNav
   class SyncError < StandardError
     attr_reader :status
@@ -111,6 +113,7 @@ module DiscourseMinicodNav
 
       tags = normalize_tags(Array(resource["tags"]))
       target_category_id = discourse_category_id_for(resource)
+      fingerprint = topic_fingerprint(title, raw, tags, target_category_id)
 
       if map.nil?
         create_opts = {
@@ -130,6 +133,7 @@ module DiscourseMinicodNav
           post_id: post.id,
           last_synced_version: version,
           last_synced_at: Time.zone.now,
+          raw_sha1: fingerprint,
         )
         apply_seo!(topic, resource)
         maybe_enqueue_asset_pull(post.id, raw: raw, pdf_url: pdf_url)
@@ -138,6 +142,19 @@ module DiscourseMinicodNav
 
       topic = Topic.find_by(id: map.topic_id)
       raise SyncError.new("topic not found", 422) unless topic
+
+      # Fingerprint short-circuit: if the rendered raw + title + tags + target
+      # category are byte-identical to last time we synced this resource, skip
+      # the PostRevisor / DiscourseTagging path entirely. apply_seo! still runs
+      # because seo can change independently; its save_custom_fields is itself
+      # dirty-checked so the no-change case is cheap.
+      if map.raw_sha1.present? &&
+           map.raw_sha1 == fingerprint &&
+           topic.category_id == target_category_id
+        map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
+        apply_seo!(topic, resource)
+        return map
+      end
 
       if topic.category_id != target_category_id
         topic.update!(category_id: target_category_id)
@@ -155,10 +172,21 @@ module DiscourseMinicodNav
         raise SyncError.new(first_post.errors.full_messages.join(", "), 422)
       end
 
-      map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
+      map.update!(
+        last_synced_version: version,
+        last_synced_at: Time.zone.now,
+        raw_sha1: fingerprint,
+      )
       apply_seo!(topic, resource)
       maybe_enqueue_asset_pull(first_post.id, raw: raw, pdf_url: pdf_url)
       map
+    end
+
+    # Stable fingerprint of everything that goes into PostRevisor.revise!.
+    # NUL separators avoid collisions where content happens to contain a
+    # natural separator.
+    def topic_fingerprint(title, raw, tags, category_id)
+      Digest::SHA1.hexdigest([title, raw, Array(tags).join("\n"), category_id.to_s].join("\x00"))
     end
 
     # Contract v1.6 §4.6: write upstream-curated SEO into topic custom fields
