@@ -13,9 +13,6 @@ discourse_minicod_nav:
   minicodnav_openscholay_base_url:
     default: ""
     client: false
-  minicodnav_upstream_ip_allowlist:
-    default: ""
-    client: false
   minicodnav_pavlovia_category_id:
     default: ""
     type: category

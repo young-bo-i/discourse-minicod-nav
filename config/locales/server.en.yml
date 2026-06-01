@@ -6,6 +6,5 @@ en:
     minicodnav_webhook_secret_pavlovia: "HMAC shared secret for webhooks where resource.source_type=pavlovia. Also used as Bearer token when pulling the pavlovia snapshot."
     minicodnav_webhook_secret_journal: "HMAC shared secret for webhooks where resource.source_type=journal (学术底刊). Also used as Bearer token when pulling the journal snapshot."
     minicodnav_openscholay_base_url: "Base URL of the openscholay upstream (e.g. https://www.minicod.com). Used to GET /api/nav/snapshot/:source during cold-start or disaster recovery."
-    minicodnav_upstream_ip_allowlist: "Comma-separated IPs or CIDRs of trusted upstream openscholay hosts. Requests originating from these IPs bypass Discourse's per-IP rate limiter (HMAC verification still applies). Has no effect on nginx-level rate limiting — see web.minicod-nav-bypass.template.yml for that."
     minicodnav_pavlovia_category_id: "Discourse category for resources with source_type=pavlovia when payload has no discourse_category_id."
     minicodnav_journal_category_id: "Discourse category for resources with source_type=journal (学术底刊) when payload has no discourse_category_id."
