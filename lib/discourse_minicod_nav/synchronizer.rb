@@ -132,7 +132,7 @@ module DiscourseMinicodNav
           last_synced_at: Time.zone.now,
         )
         apply_seo!(topic, resource)
-        enqueue_asset_pull(post.id, pdf_url: pdf_url)
+        maybe_enqueue_asset_pull(post.id, raw: raw, pdf_url: pdf_url)
         return
       end
 
@@ -158,7 +158,7 @@ module DiscourseMinicodNav
 
       map.update!(last_synced_version: version, last_synced_at: Time.zone.now)
       apply_seo!(topic, resource)
-      enqueue_asset_pull(first_post.id, pdf_url: pdf_url)
+      maybe_enqueue_asset_pull(first_post.id, raw: raw, pdf_url: pdf_url)
       map
     end
 
@@ -177,7 +177,19 @@ module DiscourseMinicodNav
       topic.save_custom_fields(true)
     end
 
-    def enqueue_asset_pull(post_id, pdf_url: nil)
+    # Only enqueue if the rendered raw still contains upstream URLs that need
+    # rehosting (or a PDF arg is set). After the first job finishes, raw no
+    # longer contains base_url, so subsequent updates of the same resource (50
+    # comment_count bumps from upstream, say) won't fan out 50 no-op jobs and
+    # 50 redundant downloads of the same upstream PDF.
+    def maybe_enqueue_asset_pull(post_id, raw:, pdf_url: nil)
+      base_url = SiteSetting.minicodnav_openscholay_base_url.to_s
+      return if base_url.blank?
+
+      needs_image_pull = raw.to_s.include?(base_url)
+      needs_pdf_pull = pdf_url.to_s.start_with?(base_url) && raw.to_s.include?(pdf_url.to_s)
+      return unless needs_image_pull || needs_pdf_pull
+
       Jobs.enqueue(:minicod_nav_pull_assets, post_id: post_id, pdf_url: pdf_url)
     end
 
